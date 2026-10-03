@@ -1,0 +1,114 @@
+{
+	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		{
+			"path": "pages/login",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/cate",
+			"style": {
+				"navigationBarTitleText": "分类"
+			}
+		},
+		{
+			"path": "pages/productxq",
+			"style": {
+				"navigationBarTitleText": "商品详情"
+			}
+		},
+		{
+			"path": "pages/shop",
+			"style": {
+				"navigationBarTitleText": "店铺"
+			}
+		},
+		{
+			"path": "pages/homepage",
+			"style": {
+				"navigationBarTitleText": "首页"
+			}
+		},
+		{
+			"path": "pages/jiesuan",
+			"style": {
+				"navigationBarTitleText": "结算"
+			}
+		},
+		{
+			"path": "pages/my",
+			"style": {
+				"navigationBarTitleText": "我的"
+			}
+		},
+		{
+			"path": "pages/gowuc",
+			"style": {
+				"navigationBarTitleText": "购物车"
+			}
+		},
+		{
+			"path": "pages/register",
+			"style": {
+				"navigationBarTitleText": "注册"
+			}
+		},
+		{
+			"path": "pages/youhuiq",
+			"style": {
+				"navigationBarTitleText": "优惠券"
+			}
+		},
+		{
+			"path": "pages/dingdan",
+			"style": {
+				"navigationBarTitleText": "订单"
+			}
+		},
+		{
+			"path": "pages/tearyouquan",
+			"style": {
+				"navigationBarTitleText": "茶友圈"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "uni-app",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8",
+		"usingComponents": {
+			"van-button": "/wxcomponents/vant-weapp/button/index",
+			"van-cell": "/wxcomponents/vant-weapp/cell/index",
+			"van-calendar": "/wxcomponents/vant-weapp/calendar/index",
+			"van-icon": "/wxcomponents/vant-weapp/icon/index",
+			"van-grid": "/wxcomponents/vant-weapp/grid/index",
+			"van-grid-item": "/wxcomponents/vant-weapp/grid-item/index",
+			"van-popup": "/wxcomponents/vant-weapp/popup/index",
+			"van-loading": "/wxcomponents/vant-weapp/loading/index",
+			"van-picker": "/wxcomponents/vant-weapp/picker/index",
+			"van-toast": "/wxcomponents/vant-weapp/toast/index",
+			"van-tag": "/wxcomponents/vant-weapp/tag/index",
+			"van-info": "/wxcomponents/vant-weapp/info/index",
+			"van-sticky": "/wxcomponents/vant-weapp/sticky/index",
+			"van-transition": "/wxcomponents/vant-weapp/transition/index",
+			"van-tab": "/wxcomponents/vant-weapp/tab/index",
+			"van-tabs": "/wxcomponents/vant-weapp/tabs/index",
+			"van-field": "/wxcomponents/vant-weapp/field/index",
+			"van-overlay": "/wxcomponents/vant-weapp/overlay/index",
+			"van-sidebar": "/wxcomponents/vant-weapp/sidebar/index",
+			"van-sidebar-item": "/wxcomponents/vant-weapp/sidebar-item/index",
+			"van-area": "/wxcomponents/vant-weapp/area/index",
+			"van-rate": "/wxcomponents/vant-weapp/rate/index",
+			"van-swipe-cell": "/wxcomponents/vant-weapp/swipe-cell/index",
+			"van-checkbox": "/wxcomponents/vant-weapp/checkbox/index",
+			"van-checkbox-group": "/wxcomponents/vant-weapp/checkbox-group/index",
+			"van-radio": "/wxcomponents/vant-weapp/radio/index",
+			"van-radio-group": "/wxcomponents/vant-weapp/radio-group/index",
+			"van-datetime-picker": "/wxcomponents/vant-weapp/datetime-picker/index",
+			"van-action-sheet": "/wxcomponents/vant-weapp/action-sheet/index"
+		}
+	},
+	"uniIdRouter": {}
+}

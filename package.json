@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@vant/area-data": "^2.1.0",
+    "@vant/weapp": "^1.11.7",
+    "axios-miniprogram-adapter": "^0.3.5",
+    "pinia": "^3.0.4"
+  }
+}

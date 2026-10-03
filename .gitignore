@@ -1,0 +1,14 @@
+# 构建产物（HBuilderX / uni-app 编译输出）
+unpackage/
+
+# 依赖
+node_modules/
+
+# IDE
+.hbuilderx/
+.idea/
+.vscode/
+
+# 系统
+.DS_Store
+Thumbs.db
