@@ -6,8 +6,15 @@ import mpAdapter from 'axios-miniprogram-adapter';
 axios.defaults.adapter = mpAdapter;
 
 // 创建axios实例
+// 说明：小程序模拟器 / 真机中 localhost 指向设备自身，连不到后端主机，
+//       因此统一使用 127.0.0.1（开发者工具需关闭「校验合法域名」）；
+//       H5/生产环境可用环境变量覆盖，部署时改这一处即可。
+const BASE_URL =
+  (typeof process !== 'undefined' && process.env && process.env.VUE_APP_BASE_URL) ||
+  'http://127.0.0.1:8080';
+
 const service = axios.create({
-  baseURL: 'http://localhost:8080', // 根据你的项目配置修改
+  baseURL: BASE_URL, // 部署时改为服务器地址，如 http://47.114.36.73
   timeout: 15000, // 请求超时时间
 });
 

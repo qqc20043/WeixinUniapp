@@ -71,6 +71,12 @@
 			"style": {
 				"navigationBarTitleText": "茶友圈"
 			}
+		},
+		{
+			"path": "pages/agent",
+			"style": {
+				"navigationBarTitleText": "智能茶饮顾问"
+			}
 		}
 	],
 	"globalStyle": {

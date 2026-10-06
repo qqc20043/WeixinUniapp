@@ -374,3 +374,125 @@ export const userYzmcap = (data) => {
 	data
   });
 };
+
+// ============================================================
+// Agent 智能茶饮顾问（独立服务 agent-service:8081，不走本 axios 实例）
+// 说明：本文件其余接口统一走 axios 实例（baseURL=127.0.0.1:8080，自动带 token）。
+//       Agent 服务是另一个微服务，地址与鉴权头都不同，因此单独封装。
+// ============================================================
+
+/** Agent 服务基地址（部署时改这里，或注入环境变量） */
+export const AGENT_BASE_URL = 'http://127.0.0.1:8081';
+
+/**
+ * 组装 Agent 请求头。
+ * <p>关键：把商城登录拿到的 token 透传给 agent-service，
+ * agent-service 再经 Feign 透传给老项目 tearSpring 做鉴权 ——
+ * 否则 Agent 的工具调用会被老项目 401 拦截，只能回答通用茶知识、
+ * 查不到真实商品数据（这是双端接入必须打通的链路）。
+ */
+const agentHeaders = () => {
+  const h = { 'Content-Type': 'application/json; charset=utf-8' };
+  try {
+    const token = uni.getStorageSync('token');
+    if (token) h.token = token;
+  } catch (e) { /* 未登录则不带 token */ }
+  return h;
+};
+
+/**
+ * 非流式问答（降级路径 / 压测）
+ * @param {{message:string, sessionId:string}} data
+ */
+export const agentChat = (data) => {
+  return new Promise((resolve, reject) => {
+    uni.request({
+      url: AGENT_BASE_URL + '/api/agent/chat',
+      method: 'POST',
+      header: agentHeaders(),
+      data,
+      success: (res) => (res.statusCode === 200 ? resolve(res.data) : reject(res.data)),
+      fail: reject
+    });
+  });
+};
+
+/**
+ * 流式问答（SSE 分块接收，需微信基础库 2.20.2+）
+ * @param {{message:string, sessionId:string}} data
+ * @param {(evt:{event:string, data:object})=>void} onEvent 逐事件回调
+ * @returns {Promise<{finished:boolean}>}
+ */
+export const agentChatStream = (data, onEvent) => {
+  return new Promise((resolve) => {
+    let buf = '';
+    let gotAny = false;
+    let settled = false;
+    const finish = (v) => { if (!settled) { settled = true; resolve(v); } };
+
+    const task = uni.request({
+      url: AGENT_BASE_URL + '/api/agent/chat/stream',
+      method: 'POST',
+      header: agentHeaders(),
+      data,
+      enableChunked: true,
+      responseType: 'text',
+      success: () => finish({ finished: gotAny }),
+      fail: () => finish({ finished: false })
+    });
+
+    if (!task || !task.onChunkReceived) {
+      finish({ finished: false });
+      return;
+    }
+
+    task.onChunkReceived((res) => {
+      try {
+        const chunk = typeof res.data === 'string'
+          ? res.data
+          : new TextDecoder('utf-8').decode(new Uint8Array(res.data));
+        buf += chunk;
+        gotAny = true;
+        let pos;
+        while ((pos = buf.indexOf('\n\n')) >= 0) {
+          const block = buf.slice(0, pos);
+          buf = buf.slice(pos + 2);
+          let event = 'message', payload = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            else if (line.startsWith('data:')) payload += line.slice(5).trim();
+          }
+          if (!payload) continue;
+          try { onEvent({ event, data: JSON.parse(payload) }); }
+          catch (e) { /* 半截 JSON，忽略 */ }
+          if (event === 'done' || event === 'error') finish({ finished: true });
+        }
+      } catch (e) {
+        console.error('SSE 分块解析失败', e);
+      }
+    });
+  });
+};
+
+/** 清空会话记忆 */
+export const agentClearSession = (sessionId) => {
+  return new Promise((resolve) => {
+    uni.request({
+      url: AGENT_BASE_URL + '/api/agent/session/' + sessionId,
+      method: 'DELETE',
+      complete: resolve
+    });
+  });
+};
+
+/** 当前生效的 LLM 运行态（模型名 / 是否 Mock），用于前端徽章 */
+export const agentLlmInfo = () => {
+  return new Promise((resolve) => {
+    uni.request({
+      url: AGENT_BASE_URL + '/api/agent/llm-info',
+      method: 'GET',
+      success: (res) => resolve(res.statusCode === 200 ? res.data : null),
+      fail: () => resolve(null)
+    });
+  });
+};

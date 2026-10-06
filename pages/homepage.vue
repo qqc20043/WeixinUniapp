@@ -180,6 +180,12 @@
 			</div>
 		</footer>
 
+		<!-- AI 智能茶饮顾问入口（浮动按钮） -->
+		<div class="ai-fab" @click="goToAgent">
+			<van-icon name="chat-o" size="22" color="#F5F1E8" />
+			<span class="ai-fab-label">问茶</span>
+		</div>
+
 		<!-- 轻提示 -->
 		<div class="toast" :class="{ visible: toastVisible, error: toastError }">
 			<div class="toast-dot" />
@@ -417,6 +423,13 @@
 				url: '/pages/my'
 			});
 		}
+	};
+
+	// 跳转 AI 智能茶饮顾问（agent-service，与商城是两个微服务）
+	const goToAgent = () => {
+		uni.navigateTo({
+			url: '/pages/agent'
+		});
 	};
 
 
@@ -1038,6 +1051,29 @@
 		backdrop-filter: blur(10px);
 		border-top: 0.5px solid rgba(139, 90, 43, 0.15);
 		z-index: 20;
+	}
+
+	/* AI 智能茶饮顾问浮动入口 */
+	.ai-fab {
+		position: fixed;
+		right: 16px;
+		bottom: 92px;
+		width: 56px;
+		height: 56px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, #2C5E30, #3E7A44);
+		box-shadow: 0 4px 14px rgba(44, 94, 48, 0.4);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1px;
+		z-index: 30;
+	}
+	.ai-fab-label {
+		font-size: 10px;
+		color: #F5F1E8;
+		letter-spacing: 1px;
 	}
 	
 	.tab-item {
