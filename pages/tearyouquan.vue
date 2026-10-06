@@ -304,7 +304,7 @@
 		// router.back()
 		// #endif
 		// #ifdef MP-WEIXIN
-		wx.navigateBack()
+		uni.navigateBack()
 		// #endif
 	}
 

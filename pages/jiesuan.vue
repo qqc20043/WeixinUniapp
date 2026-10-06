@@ -321,6 +321,7 @@
       round
 	  :z-index="2000"
     >
+      <!-- #ifdef MP-WEIXIN -->
       <van-area
         :area-list="areaList"
         :columns-num="3"
@@ -328,6 +329,10 @@
         @cancel="closeAreaPicker"
         :title="'选择所在地区'"
       />
+      <!-- #endif -->
+      <!-- #ifdef H5 -->
+      <van-picker title="选择所在地区" :columns="[]" @confirm="onAreaConfirm" @cancel="closeAreaPicker" />
+      <!-- #endif -->
     </van-popup>
 
     <!-- 配送方式选择面板 -->

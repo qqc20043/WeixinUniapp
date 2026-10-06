@@ -335,7 +335,7 @@
 	}
 
 	const goBack = () => {
-		wx.navigateBack()
+		uni.navigateBack()
 	}
 
 	const goToCart = () => {

@@ -1,23 +1,24 @@
 {
-    "dependencies":  {
-                         "@vant/area-data":  "^2.1.0",
-                         "@vant/weapp":  "^1.11.7",
-                         "axios-miniprogram-adapter":  "^0.3.5",
-                         "pinia":  "^3.0.4"
-                     },
-    "devDependencies":  {
-                            "@dcloudio/uni-app":  "^3.0.0-4030620241128001",
-                            "@dcloudio/uni-components":  "^3.0.0-4030620241128001",
-                            "@dcloudio/uni-h5":  "^3.0.0-4030620241128001",
-                            "@dcloudio/uni-mp-weixin":  "^3.0.0-4030620241128001",
-                            "@dcloudio/vite-plugin-uni":  "^3.0.0-4030620241128001",
-                            "vite":  "^5.2.8",
-                            "vue-i18n":  "^9.14.4"
-                        },
-    "scripts":  {
-                    "dev:h5":  "uni",
-                    "build:h5":  "uni build",
-                    "dev:mp-weixin":  "uni -p mp-weixin",
-                    "build:mp-weixin":  "uni build -p mp-weixin"
-                }
+    "dependencies": {
+        "@vant/area-data": "^2.1.0",
+        "@vant/weapp": "^1.11.7",
+        "axios-miniprogram-adapter": "^0.3.5",
+        "pinia": "^3.0.4",
+        "vant": "^4.10.2"
+    },
+    "devDependencies": {
+        "@dcloudio/uni-app": "^3.0.0-4030620241128001",
+        "@dcloudio/uni-components": "^3.0.0-4030620241128001",
+        "@dcloudio/uni-h5": "^3.0.0-4030620241128001",
+        "@dcloudio/uni-mp-weixin": "^3.0.0-4030620241128001",
+        "@dcloudio/vite-plugin-uni": "^3.0.0-4030620241128001",
+        "vite": "^5.2.8",
+        "vue-i18n": "^9.14.4"
+    },
+    "scripts": {
+        "dev:h5": "uni",
+        "build:h5": "uni build",
+        "dev:mp-weixin": "uni -p mp-weixin",
+        "build:mp-weixin": "uni build -p mp-weixin"
+    }
 }

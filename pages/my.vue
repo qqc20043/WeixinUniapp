@@ -322,8 +322,13 @@
 
 		<!-- 地区选择弹窗 -->
 		<van-popup :show="showAreaPopup" position="bottom" @close="closeAreaPicker" :z-index="2200" round>
+			<!-- #ifdef MP-WEIXIN -->
 			<van-area :area-list="areaList" :columns-num="3" @confirm="onAreaConfirm" @cancel="closeAreaPicker"
 				:title="'选择所在地区'" :value="newAddress.region" />
+			<!-- #endif -->
+			<!-- #ifdef H5 -->
+			<van-picker title="选择所在地区" :columns="[]" @confirm="onAreaConfirm" @cancel="closeAreaPicker" />
+			<!-- #endif -->
 		</van-popup>
 
 		<!-- ========== 我的茶具弹窗 ========== -->
@@ -578,8 +583,13 @@
 			</div>
 		</van-popup>
 		<van-popup :show="calendarShow" position="bottom" custom-style="height: 50%;" @close="onClose">
+			<!-- #ifdef MP-WEIXIN -->
 			<van-datetime-picker type="date" :value="birthdayd" :min-date="minDate" 
 			:max-date="maxDate" @confirm="onConfirm" @cancel="onClose" />
+			<!-- #endif -->
+			<!-- #ifdef H5 -->
+			<van-date-picker title="选择生日" :min-date="minDate" :max-date="maxDate" @confirm="onConfirm" @cancel="onClose" />
+			<!-- #endif -->
 		</van-popup>
 
 		<!-- 头像选择弹窗 -->
@@ -975,7 +985,7 @@
 	}
 
 	const goBack = () => {
-		wx.navigateBack()
+		uni.navigateBack()
 	}
 
 	const goToSettings = () => {

@@ -295,7 +295,7 @@
 
 	const goBack = () => {
 		// #ifdef MP-WEIXIN
-		wx.navigateBack()
+		uni.navigateBack()
 		// #endif
 	}
 
@@ -322,7 +322,7 @@
 	}
 
 	const callPhone = (phone) => {
-		wx.makePhoneCall({
+		uni.makePhoneCall({
 			phoneNumber: phone
 		})
 	}

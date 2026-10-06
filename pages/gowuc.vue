@@ -403,7 +403,7 @@
 	};
 	
 	const goBack = () => {
-		wx.navigateBack()
+		uni.navigateBack()
 	}
 
 	// 底部导航点击
