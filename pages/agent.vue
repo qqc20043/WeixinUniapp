@@ -138,6 +138,15 @@
 			m.typing = false
 			m.stats = j
 			busy.value = false
+		} else if (event === 'auth_expired') {
+			// 鉴权失败确定性事件：清本地 token 并跳登录页（与 axios 拦截器行为对齐）
+			m.content += '\n🔑 登录已过期，正在跳转登录页…'
+			m.typing = false
+			busy.value = false
+			try { uni.removeStorageSync('token') } catch (e) { /* 忽略 */ }
+			setTimeout(() => {
+				uni.navigateTo({ url: '/pages/login' })
+			}, 900)
 		} else if (event === 'error') {
 			m.content += '\n[出错] ' + (j.message || '')
 			m.typing = false
