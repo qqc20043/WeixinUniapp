@@ -309,7 +309,12 @@
 
 					<div class="form-group checkbox-group">
 						<label class="checkbox-label">
+							<!-- #ifdef MP-WEIXIN -->
 							<van-checkbox :value="newAddress.isDefault" @change="onIsDefault">默认地址勾选</van-checkbox>
+							<!-- #endif -->
+							<!-- #ifdef H5 -->
+							<van-checkbox :model-value="newAddress.isDefault" @change="onIsDefault">默认地址勾选</van-checkbox>
+							<!-- #endif -->
 						</label>
 					</div>
 				</div>
