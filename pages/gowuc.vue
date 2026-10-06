@@ -26,7 +26,13 @@
 			</div>
 
 			<!-- 购物车列表 -->
-			<div v-else class="cart-list">
+			<!--
+				:key 绑定 isEditMode：切换编辑模式时强制整棵子树重建，而不是走 patch。
+				原因：uni-app H5 下 patch 本列表时会抛异常（vant 4 组件在 H5 的兼容问题，
+				见下方 item-quantity 注释），导致 patch 中途中断——表现为顶部「编辑/完成」
+				文字已切换、但列表内的数量控件与删除按钮不更新。整树重建可绕开该问题。
+			-->
+			<div v-else class="cart-list" :key="isEditMode ? 'cart-edit' : 'cart-view'">
 				<!-- 店铺分组 -->
 				<div v-for="(shop, shopIndex) in cartShops" :key="shop.id" class="shop-section">
 					<!-- 店铺头 -->
@@ -74,7 +80,14 @@
 
 						<!-- 数量操作区 -->
 						<div class="item-quantity">
-							<div v-if="!isEditMode" class="quantity-control">
+							<!--
+								用 v-show 而非 v-if：
+								uni-app H5 下本列表 patch 时会抛异常（vant 4 组件兼容问题），
+								导致 patch 中途中断——表现为顶部「编辑/完成」已切换、
+								但列表内 v-if 分支不更新。v-show 只切 style，不增删节点，
+								完全绕开 patch，双端行为一致。
+							-->
+							<div v-show="!isEditMode" class="quantity-control">
 								<button class="qty-btn minus" @click.stop="decreaseQuantity(shopIndex, itemIndex)"
 									:disabled="item.quantity <= 1">
 									<van-icon name="minus" size="12" color="#8B5A2B" />
@@ -86,7 +99,7 @@
 							</div>
 
 							<!-- 编辑模式：删除按钮 -->
-							<div v-else class="edit-control">
+							<div v-show="isEditMode" class="edit-control">
 								<button class="delete-btn" @click.stop="deleteItem(shopIndex, itemIndex, item)">
 									<van-icon name="delete" size="18" color="#CD5C5C" />
 								</button>
@@ -223,31 +236,58 @@
 
 	// 获取购物车商品数据——随机推荐商品
 	const vCartDetail = async () => {
+		// 必须清空：本页是 tabbar 页，每次进入都会触发 onLoad，
+		// 不清空会与上一次的数据累积，出现「幽灵店铺/空白行」并污染合计金额。
+		cartShops.value = []
 		await selectVCartDetail().then(res => {
-			res.VCartDetailEnhancedList.forEach(ele => {
-				let indexC = cartShops.value.indexOf(ele.shopId);
+			const rawList = res.VCartDetailEnhancedList || []
+			// 按 cartItemId 去重。
+			// 原因：老项目视图 v_cart_detail_enhanced 里对 theme_product 做了 LEFT JOIN，
+			// 而商品与主题是多对多（一个商品属于多个主题），导致同一条购物车记录被放大成 N 行
+			// （实测商品属于 2 个主题 → 返回 2 条重复）。前端必须去重，否则列表与合计都会翻倍。
+			const seen = new Set()
+			const list = rawList.filter(ele => {
+				// 无法关联商品/规格的脏行不渲染，避免空白商品卡片和 NaN 合计；
+				// 正常数据仍由后端视图返回完整 productId + specId + price。
+				if (ele.productId == null || ele.specId == null || !Number.isFinite(parseFloat(ele.specPrice))) {
+					console.warn('购物车跳过无效条目:', ele.cartItemId, ele.productId, ele.specId)
+					return false
+				}
+				if (ele.cartItemId == null) return true
+				if (seen.has(ele.cartItemId)) return false
+				seen.add(ele.cartItemId)
+				return true
+			})
+			list.forEach(ele => {
+				// 修复：原代码用 cartShops.value.indexOf(ele.shopId) 判重——
+				// cartShops 是对象数组，indexOf(数字) 恒为 -1，导致每条商品都新建一个店铺分组。
+				// 改为按 id 查找。
+				let indexC = cartShops.value.findIndex(shop => shop.id === ele.shopId)
 				if(indexC == -1) {
 					const datas = {
 						id: ele.shopId,
 						name: ele.shopName,
 						badge: ele.shopBadge,
-						checked: ele.checked,
+						// 统一成布尔：后端返回 1/0，直接当布尔用会让「全选」判定出错
+						checked: !!ele.checked,
 						items:[]
 					}
 					cartShops.value.push(datas);
 					indexC = cartShops.value.length - 1;
 				}
 				const item = {
-					id: ele.productId,
+					id: ele.cartItemId,          // 购物车条目主键（删除/更新时后端按 productId+specId 定位，保留备查）
+					cartItemId: ele.cartItemId,
 					productId: ele.productId,
 					themeId: ele.themeId,
 					name: ele.productName,
 					spec: ele.specName,
 					specId: ele.specId,
 					price: ele.specPrice,
+					originalPrice: ele.specOriginalPrice,
 					quantity: ele.quantity,
 					emoji: ele.productEmoji,
-					checked: ele.checked,
+					checked: !!ele.checked,      // 统一成布尔，避免 1/0 参与运算
 					stock: ele.specStock
 				}
 				cartShops.value[indexC].items.push(item)
@@ -264,7 +304,9 @@
 		// 复制一份，避免修改原数组
 		let tempArr = [...productList.value];
 		recommendItems.value = []
-		for(let i = 0; i < 4; i ++) {
+		// 商品不足 4 条时按实际数量取，避免 push undefined 产生空白卡片
+		const n = Math.min(4, tempArr.length)
+		for(let i = 0; i < n; i ++) {
 			let randomIndex = Math.floor(Math.random() * tempArr.length)
 			recommendItems.value.push(tempArr[randomIndex])
 			tempArr.splice(randomIndex, 1);
@@ -295,7 +337,13 @@
 		return cartShops.value
 			.flatMap(shop => shop.items)
 			.filter(item => item.checked)
-			.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0)
+			// 兜底：price 可能缺失/非数字，直接用会让整个 reduce 变成 NaN（页面显示「合计：¥NaN」）
+			.reduce((sum, item) => {
+				const p = parseFloat(item.price)
+				const q = parseInt(item.quantity, 10)
+				if (!Number.isFinite(p) || !Number.isFinite(q)) return sum
+				return sum + p * q
+			}, 0)
 			.toFixed(2);
 	});
 
@@ -340,7 +388,7 @@
 	const increaseQuantity = async(shopIndex, itemIndex) => {
 		const item = cartShops.value[shopIndex].items[itemIndex];
 		item.quantity++;
-		await insertCartItem(item)
+		await insertCartItem(toCartItemPayload(item))
 	};
 
 	// 减少数量
@@ -349,12 +397,28 @@
 		if (item.quantity > 1) {
 			item.quantity--;
 		}
-		await insertCartItem(item)
+		await insertCartItem(toCartItemPayload(item))
 	};
+
+	/**
+	 * 组装后端 CartItem 实体需要的字段。
+	 *
+	 * 为什么不能直接把前端 item 整个发出去：
+	 *   后端 CartItem.checked 是 Integer，而前端把 checked 规范成了布尔（!!ele.checked）。
+	 *   直接发整个对象会让 Jackson 反序列化 Boolean→Integer 失败，接口返回 HTTP 400
+	 *   （实测：完整对象删除返回 400，只发 productId+specId 返回 200）。
+	 *   因此统一走本函数裁剪字段，并保持 checked 为 1/0。
+	 */
+	const toCartItemPayload = (item) => ({
+		productId: item.productId,
+		specId: item.specId,
+		quantity: item.quantity,
+		checked: item.checked ? 1 : 0
+	});
 
 	// 删除商品
 	const deleteItem = async(shopIndex, itemIndex, item) => {
-		await delCartItem(item).then(res => {
+		await delCartItem(toCartItemPayload(item)).then(res => {
 			cartShops.value[shopIndex].items.splice(itemIndex, 1);
 			// 如果店铺内没有商品了，删除店铺
 			if (cartShops.value[shopIndex].items.length === 0) {
