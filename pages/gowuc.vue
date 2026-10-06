@@ -78,29 +78,22 @@
 							</div>
 						</div>
 
-						<!-- 数量操作区 -->
-						<div class="item-quantity">
-							<!--
-								用 v-show 而非 v-if：
-								uni-app H5 下本列表 patch 时会抛异常（vant 4 组件兼容问题），
-								导致 patch 中途中断——表现为顶部「编辑/完成」已切换、
-								但列表内 v-if 分支不更新。v-show 只切 style，不增删节点，
-								完全绕开 patch，双端行为一致。
-							-->
-							<div v-show="!isEditMode" class="quantity-control">
-								<button class="qty-btn minus" @click.stop="decreaseQuantity(shopIndex, itemIndex)"
+						<!-- 数量/删除操作区：两套 DOM 常驻，只切换 editing class，避免 H5 patch 丢分支 -->
+						<div class="item-quantity" :class="{ editing: isEditMode }">
+							<div class="quantity-control">
+								<button type="button" class="qty-btn minus" @click.stop.prevent="decreaseQuantity(shopIndex, itemIndex)"
 									:disabled="item.quantity <= 1">
 									<van-icon name="minus" size="12" color="#8B5A2B" />
 								</button>
 								<span class="qty-number">{{ item.quantity }}</span>
-								<button class="qty-btn plus" @click.stop="increaseQuantity(shopIndex, itemIndex)">
+								<button type="button" class="qty-btn plus" @click.stop.prevent="increaseQuantity(shopIndex, itemIndex)">
 									<van-icon name="plus" size="12" color="#8B5A2B" />
 								</button>
 							</div>
 
 							<!-- 编辑模式：删除按钮 -->
-							<div v-show="isEditMode" class="edit-control">
-								<button class="delete-btn" @click.stop="deleteItem(shopIndex, itemIndex, item)">
+							<div class="edit-control">
+								<button type="button" class="delete-btn" @click.stop.prevent="deleteItem(shopIndex, itemIndex, item)">
 									<van-icon name="delete" size="18" color="#CD5C5C" />
 								</button>
 							</div>
@@ -811,6 +804,18 @@
 		color: #2C2C2C;
 		min-width: 20px;
 		text-align: center;
+	}
+
+	.item-quantity.editing .quantity-control {
+		display: none !important;
+	}
+
+	.item-quantity:not(.editing) .edit-control {
+		display: none !important;
+	}
+
+	.item-quantity.editing .edit-control {
+		display: flex !important;
 	}
 
 	.edit-control {
