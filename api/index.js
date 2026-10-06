@@ -418,18 +418,86 @@ export const agentChat = (data) => {
 };
 
 /**
- * 流式问答（SSE 分块接收，需微信基础库 2.20.2+）
+ * 解析一段 SSE 缓冲，返回未消费的剩余部分。
+ * @param {string} buf       累计缓冲
+ * @param {(evt:{event:string,data:object})=>void} onEvent 事件回调
+ * @param {()=>void} onDone 收到 done/error 时回调
+ * @returns {string} 剩余未成块的缓冲
+ */
+const drainSse = (buf, onEvent, onDone) => {
+  let pos;
+  while ((pos = buf.indexOf('\n\n')) >= 0) {
+    const block = buf.slice(0, pos);
+    buf = buf.slice(pos + 2);
+    let event = 'message', payload = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) payload += line.slice(5).trim();
+    }
+    if (!payload) continue;
+    try { onEvent({ event, data: JSON.parse(payload) }); }
+    catch (e) { /* 半截 JSON，忽略 */ }
+    if (event === 'done' || event === 'error') onDone();
+  }
+  return buf;
+};
+
+/**
+ * 流式问答（SSE）。
+ *
+ * 双端实现差异（重要）：
+ *   - 小程序：`uni.request` 的 `enableChunked` 分块接收（微信基础库 2.20.2+）；
+ *   - H5：`uni.request` 不支持 enableChunked，改用浏览器原生 fetch + ReadableStream，
+ *     否则会静默走降级路径、丢掉打字机效果（这正是 H5 端曾显示「· 降级」的原因）。
+ *   两端共用 drainSse 解析，行为一致。
+ *
  * @param {{message:string, sessionId:string}} data
  * @param {(evt:{event:string, data:object})=>void} onEvent 逐事件回调
- * @returns {Promise<{finished:boolean}>}
+ * @returns {Promise<{finished:boolean}>} finished=false 表示未收到任何流式数据，调用方应降级
  */
 export const agentChatStream = (data, onEvent) => {
-  return new Promise((resolve) => {
-    let buf = '';
-    let gotAny = false;
-    let settled = false;
-    const finish = (v) => { if (!settled) { settled = true; resolve(v); } };
+  let gotAny = false;
+  let settled = false;
+  let done = false;
+  let resolveFn = null;
+  const finish = (v) => { if (!settled) { settled = true; resolveFn && resolveFn(v); } };
 
+  const promise = new Promise((resolve) => { resolveFn = resolve; });
+
+  // ---------- H5：原生 fetch + ReadableStream ----------
+  // #ifdef H5
+  (async () => {
+    try {
+      const resp = await fetch(AGENT_BASE_URL + '/api/agent/chat/stream', {
+        method: 'POST',
+        headers: agentHeaders(),
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok || !resp.body) { finish({ finished: false }); return; }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buf = '';
+      for (;;) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+        buf += decoder.decode(value, { stream: true });
+        gotAny = true;
+        buf = drainSse(buf, onEvent, () => { done = true; });
+        if (done) break;
+      }
+      finish({ finished: gotAny });
+    } catch (e) {
+      console.warn('H5 SSE 流式失败，将降级为非流式', e);
+      finish({ finished: false });
+    }
+  })();
+  // #endif
+
+  // ---------- 小程序：uni.request enableChunked ----------
+  // #ifndef H5
+  {
+    let buf = '';
     const task = uni.request({
       url: AGENT_BASE_URL + '/api/agent/chat/stream',
       method: 'POST',
@@ -443,35 +511,24 @@ export const agentChatStream = (data, onEvent) => {
 
     if (!task || !task.onChunkReceived) {
       finish({ finished: false });
-      return;
-    }
-
-    task.onChunkReceived((res) => {
-      try {
-        const chunk = typeof res.data === 'string'
-          ? res.data
-          : new TextDecoder('utf-8').decode(new Uint8Array(res.data));
-        buf += chunk;
-        gotAny = true;
-        let pos;
-        while ((pos = buf.indexOf('\n\n')) >= 0) {
-          const block = buf.slice(0, pos);
-          buf = buf.slice(pos + 2);
-          let event = 'message', payload = '';
-          for (const line of block.split('\n')) {
-            if (line.startsWith('event:')) event = line.slice(6).trim();
-            else if (line.startsWith('data:')) payload += line.slice(5).trim();
-          }
-          if (!payload) continue;
-          try { onEvent({ event, data: JSON.parse(payload) }); }
-          catch (e) { /* 半截 JSON，忽略 */ }
-          if (event === 'done' || event === 'error') finish({ finished: true });
+    } else {
+      task.onChunkReceived((res) => {
+        try {
+          const chunk = typeof res.data === 'string'
+            ? res.data
+            : new TextDecoder('utf-8').decode(new Uint8Array(res.data));
+          buf += chunk;
+          gotAny = true;
+          buf = drainSse(buf, onEvent, () => { done = true; });
+        } catch (e) {
+          console.error('SSE 分块解析失败', e);
         }
-      } catch (e) {
-        console.error('SSE 分块解析失败', e);
-      }
-    });
-  });
+      });
+    }
+  }
+  // #endif
+
+  return promise;
 };
 
 /** 清空会话记忆 */
