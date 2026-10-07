@@ -1036,8 +1036,13 @@
 		});
 	}
 
+	// 点击订单状态 → 跳转到订单页并定位到对应 tab
+	// 原实现只弹一个「跳转xx订单」提示，不跳转，用户点了没反应。
 	const goToOrderList = (type) => {
-		showToast(`跳转${type}订单`)
+		uni.navigateTo({
+			url: `/pages/dingdan?tab=${type}`,
+			fail: () => uni.reLaunch({ url: `/pages/dingdan?tab=${type}` })
+		})
 	}
 
 	const goToCoupons = () => {

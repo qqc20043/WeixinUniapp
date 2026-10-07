@@ -244,7 +244,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { VOrderItemDetail } from '@/api/index.js'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 
 // ============ 状态定义 ============
 const toastVisible = ref(false)
@@ -382,6 +382,14 @@ const loadOrders = async () => {
 }
 
 const hasMore = ref(false)
+
+// 支持从「我的」页带 tab 参数进入（如 /pages/dingdan?tab=unship）
+onLoad((option) => {
+  const t = option && option.tab
+  if (t && orderTabs.value.some(x => x.type === t)) {
+    currentTab.value = t
+  }
+})
 
 // 每次进入页面都重新拉取：下单后返回本页能看到新订单
 onShow(() => {
