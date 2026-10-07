@@ -104,6 +104,11 @@
 
 	const askQuick = (text) => { input.value = text; ask() }
 
+	/** 鉴权失效的统一文案（与后端固定文案一致） */
+	const AUTH_EXPIRED_TEXT = '🔑 登录已过期，请重新登录后再继续，我在这等你回来。'
+	/** 本次会话是否已触发过鉴权失效，用于忽略其后的 delta */
+	let authExpiredFired = false
+
 	const ask = async () => {
 		const text = (input.value || '').trim()
 		if (!text || busy.value) return
@@ -113,6 +118,7 @@
 		const idx = pushBot()
 		scrollBottom()
 
+		authExpiredFired = false   // 新一轮对话重置鉴权失效标志，避免跳转失败后消息被永久吞掉
 		const payload = { message: text, sessionId: sessionId.value }
 
 		// 优先流式；未收到任何数据则降级为非流式
@@ -130,6 +136,26 @@
 	const handleEvent = (event, j, idx) => {
 		const m = messages.value[idx]
 		if (!m) return
+
+		// 鉴权失败：后端把它作为 tool 事件下发（data.type === 'auth_expired'），
+		// 而不是独立事件名——因此必须在这里先判 type，否则会被当成普通工具调用
+		// 显示成「调用工具: auth_expired」，且不会跳转登录页（实测踩过）。
+		if (j && j.type === 'auth_expired') {
+			m.content = AUTH_EXPIRED_TEXT
+			m.typing = false
+			m.tool = ''
+			busy.value = false
+			authExpiredFired = true      // 置位后忽略后续 delta，避免文案被追加重复
+			handleAuthExpired()
+			return
+		}
+
+		// auth_expired 之后后端仍会推固定文案的 delta + done，这里直接吞掉
+		if (authExpiredFired) {
+			if (event === 'done') { m.typing = false; m.stats = j }
+			return
+		}
+
 		if (event === 'delta') {
 			m.content += j.content || ''
 		} else if (event === 'tool') {
@@ -139,19 +165,36 @@
 			m.stats = j
 			busy.value = false
 		} else if (event === 'auth_expired') {
-			// 鉴权失败确定性事件：清本地 token 并跳登录页（与 axios 拦截器行为对齐）
-			m.content += '\n🔑 登录已过期，正在跳转登录页…'
+			// 兼容独立事件名的写法（后端当前不发，保留以防协议调整）
+			m.content = AUTH_EXPIRED_TEXT
 			m.typing = false
 			busy.value = false
-			try { uni.removeStorageSync('token') } catch (e) { /* 忽略 */ }
-			setTimeout(() => {
-				uni.navigateTo({ url: '/pages/login' })
-			}, 900)
+			authExpiredFired = true
+			handleAuthExpired()
 		} else if (event === 'error') {
 			m.content += '\n[出错] ' + (j.message || '')
 			m.typing = false
 			busy.value = false
 		}
+	}
+
+	/**
+	 * 登录态失效的统一处理：清 token + 跳登录页。
+	 * 用 reLaunch 而非 navigateTo：登录页必须成为栈底，
+	 * 否则用户能返回到已失效的问茶页继续发消息，且页面栈可能超 10 层导致跳转失败。
+	 * 加 authRedirecting 标志，避免 SSE 多次触发时重复跳转。
+	 */
+	let authRedirecting = false
+	const handleAuthExpired = () => {
+		if (authRedirecting) return
+		authRedirecting = true
+		try { uni.removeStorageSync('token') } catch (e) { /* 忽略 */ }
+		setTimeout(() => {
+			uni.reLaunch({
+				url: '/pages/login',
+				complete: () => { authRedirecting = false }
+			})
+		}, 1200)
 	}
 
 	/** 降级：非流式一次性返回 */
