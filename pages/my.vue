@@ -624,7 +624,8 @@
 		categoryLists,
 		userProductCategory,
 		userDataUpdate,
-		vMomentList
+		vMomentList,
+		VOrderItemDetail
 	} from "../api/index.js"
 	import {
 		onLoad
@@ -795,36 +796,67 @@
 		}
 	])
 
-	// 订单状态数据
+	// 订单状态数据（count 由真实订单接口计算，不再硬编码）
+	// 原实现把每个状态写死为 count:1，与用户实际订单无关，会出现「我没有待发货订单却显示 1」。
 	const orderStatus = ref([{
 			name: '待付款',
 			type: 'unpaid',
 			icon: 'clock-o',
 			color: '#8B5A2B',
-			count: 1
+			count: 0
 		},
 		{
 			name: '待发货',
 			type: 'unship',
 			icon: 'send-gift-o',
 			color: '#2C5E30',
-			count: 1
+			count: 0
 		},
 		{
 			name: '待收货',
 			type: 'unreceive',
 			icon: 'logistics',
 			color: '#DAA520',
-			count: 1
+			count: 0
 		},
 		{
 			name: '待评价',
 			type: 'unreview',
 			icon: 'chat-o',
 			color: '#708070',
-			count: 1
+			count: 0
 		}
 	])
+
+	// 后端 status → 本页 tab 分组（与订单页保持一致）
+	const MY_STATUS_TAB = {
+		unpaid: 'unpaid',
+		paid: 'unship',
+		unship: 'unship',
+		shipped: 'unreceive',
+		unreceive: 'unreceive',
+		received: 'unreview',
+		unreview: 'unreview'
+	}
+
+	/** 用真实订单刷新角标（按订单去重计数，同一订单多个商品只算一单） */
+	const loadOrderCounts = async () => {
+		try {
+			const res = await VOrderItemDetail()
+			const rows = (res && res.vOrderItemDetailList) || []
+			const seen = new Map()   // orderId -> tab
+			rows.forEach(r => {
+				if (!seen.has(r.orderId)) {
+					seen.set(r.orderId, MY_STATUS_TAB[r.orderStatus] || r.orderStatus)
+				}
+			})
+			const counts = { unpaid: 0, unship: 0, unreceive: 0, unreview: 0 }
+			seen.forEach(tab => { if (counts[tab] !== undefined) counts[tab]++ })
+			orderStatus.value = orderStatus.value.map(s => ({ ...s, count: counts[s.type] || 0 }))
+		} catch (e) {
+			console.warn('订单角标加载失败', e)
+		}
+	}
 
 	// ============ 地址相关 ============
 	const addressTags = ['家', '公司', '学校']
@@ -867,6 +899,7 @@
 		obtainUserData()
 		addressHandle()
 		userNoteHandle()
+		loadOrderCounts()
 	})
 
 	const onIsDefault = (res) => {

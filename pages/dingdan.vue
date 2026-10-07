@@ -243,6 +243,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { VOrderItemDetail } from '@/api/index.js'
+import { onShow } from '@dcloudio/uni-app'
 
 // ============ 状态定义 ============
 const toastVisible = ref(false)
@@ -262,14 +264,14 @@ const currentReviewItems = ref([])
 const selectedCancelReason = ref('')
 const selectedPayment = ref('')
 
-// 订单标签
+// 订单标签（count 由真实订单计算，不再硬编码——原先写死 5/1/1/1/1/1 与用户实际订单无关）
 const orderTabs = ref([
-  { type: 'all', name: '全部', count: 5 },
-  { type: 'unpaid', name: '待付款', count: 1 },
-  { type: 'unship', name: '待发货', count: 1 },
-  { type: 'unreceive', name: '待收货', count: 1 },
-  { type: 'unreview', name: '待评价', count: 1 },
-  { type: 'completed', name: '已完成', count: 1 }
+  { type: 'all', name: '全部', count: 0 },
+  { type: 'unpaid', name: '待付款', count: 0 },
+  { type: 'unship', name: '待发货', count: 0 },
+  { type: 'unreceive', name: '待收货', count: 0 },
+  { type: 'unreview', name: '待评价', count: 0 },
+  { type: 'completed', name: '已完成', count: 0 }
 ])
 
 // 取消原因
@@ -297,139 +299,94 @@ const paymentMethods = ref([
   }
 ])
 
-// 订单数据
-const orders = ref([
-  {
-    id: 'ORD202403051234',
-    shopId: 1,
-    shopName: '漫思茶·官方旗舰店',
-    shopBadge: '官方',
-    status: 'unpaid',
-    statusText: '待付款',
-    createTime: '2024-03-05 14:30',
-    totalCount: 3,
-    totalAmount: '792.00',
-    payAmount: '762.00',
-    items: [
-      {
-        id: 101,
-        name: '明前龙井',
-        spec: '2024明前特级 100g',
-        price: '198.00',
-        quantity: 2,
-        emoji: '🍃'
-      },
-      {
-        id: 102,
-        name: '狗牯脑茶',
-        spec: '高山云雾 150g',
-        price: '168.00',
-        quantity: 1,
-        emoji: '🌿'
-      }
-    ]
-  },
-  {
-    id: 'ORD202403041234',
-    shopId: 2,
-    shopName: '井冈山·茶文化馆',
-    shopBadge: '精选',
-    status: 'unship',
-    statusText: '待发货',
-    createTime: '2024-03-04 10:15',
-    totalCount: 1,
-    totalAmount: '228.00',
-    payAmount: '228.00',
-    items: [
-      {
-        id: 201,
-        name: '井冈翠绿',
-        spec: '特级 200g',
-        price: '228.00',
-        quantity: 1,
-        emoji: '🍵'
-      }
-    ]
-  },
-  {
-    id: 'ORD202403031234',
-    shopId: 1,
-    shopName: '漫思茶·官方旗舰店',
-    shopBadge: '官方',
-    status: 'unreceive',
-    statusText: '待收货',
-    createTime: '2024-03-03 16:20',
-    totalCount: 2,
-    totalAmount: '396.00',
-    payAmount: '366.00',
-    items: [
-      {
-        id: 101,
-        name: '明前龙井',
-        spec: '2024明前特级 100g',
-        price: '198.00',
-        quantity: 2,
-        emoji: '🍃'
-      }
-    ]
-  },
-  {
-    id: 'ORD202403021234',
-    shopId: 2,
-    shopName: '井冈山·茶文化馆',
-    shopBadge: '精选',
-    status: 'unreview',
-    statusText: '待评价',
-    createTime: '2024-03-02 09:30',
-    totalCount: 1,
-    totalAmount: '228.00',
-    payAmount: '228.00',
-    items: [
-      {
-        id: 201,
-        name: '井冈翠绿',
-        spec: '特级 200g',
-        price: '228.00',
-        quantity: 1,
-        emoji: '🍵',
-        rating: 0,
-        review: ''
-      }
-    ]
-  },
-  {
-    id: 'ORD202402281234',
-    shopId: 1,
-    shopName: '漫思茶·官方旗舰店',
-    shopBadge: '官方',
-    status: 'completed',
-    statusText: '已完成',
-    createTime: '2024-02-28 11:45',
-    totalCount: 2,
-    totalAmount: '366.00',
-    payAmount: '336.00',
-    items: [
-      {
-        id: 102,
-        name: '狗牯脑茶',
-        spec: '高山云雾 150g',
-        price: '168.00',
-        quantity: 1,
-        emoji: '🌿'
-      },
-      {
-        id: 101,
-        name: '明前龙井',
-        spec: '2024明前特级 100g',
-        price: '198.00',
-        quantity: 1,
-        emoji: '🍃'
-      }
-    ]
-  }
-])
+// 订单数据（来自老项目真实接口 /order/VOrderItemDetail，按 orderId 分组）
+// 说明：原实现是页面内硬编码的演示数据（订单号 ORD2024xxxx、日期 2024-03），
+// 与登录用户无关，会出现「显示的不是我订的订单」。现改为调真实接口。
+const orders = ref([])
+const loading = ref(false)
 
-const hasMore = ref(false) // 示例中无更多数据
+// 后端 status → 展示文案 / 筛选 tab 分组
+const STATUS_TEXT = {
+  unpaid: '待付款',
+  paid: '待发货',
+  unship: '待发货',
+  shipped: '待收货',
+  unreceive: '待收货',
+  received: '待评价',
+  unreview: '待评价',
+  completed: '已完成',
+  cancelled: '已取消',
+  canceled: '已取消'
+}
+
+const STATUS_TAB = {
+  unpaid: 'unpaid',
+  paid: 'unship',
+  unship: 'unship',
+  shipped: 'unreceive',
+  unreceive: 'unreceive',
+  received: 'unreview',
+  unreview: 'unreview',
+  completed: 'completed'
+}
+
+/** 拉取真实订单：接口返回扁平的「订单项」列表，需按 orderId 聚合 */
+const loadOrders = async () => {
+  loading.value = true
+  try {
+    const res = await VOrderItemDetail()
+    const rows = (res && res.vOrderItemDetailList) || []
+    const byOrder = new Map()
+
+    rows.forEach(r => {
+      const oid = r.orderId
+      if (!byOrder.has(oid)) {
+        const st = r.orderStatus || 'unpaid'
+        byOrder.set(oid, {
+          id: oid,
+          orderNo: r.orderNo,
+          shopId: r.shopId,
+          shopName: r.shopName || '未知店铺',
+          shopBadge: r.shopBadge || '',
+          status: STATUS_TAB[st] || st,
+          rawStatus: st,
+          statusText: STATUS_TEXT[st] || st,
+          createTime: (r.orderCreatedAt || '').replace('T', ' ').slice(0, 16),
+          totalCount: 0,
+          totalAmount: Number(r.totalAmount || 0).toFixed(2),
+          payAmount: Number(r.payAmount || 0).toFixed(2),
+          items: []
+        })
+      }
+      const o = byOrder.get(oid)
+      o.items.push({
+        id: r.orderItemId,
+        productId: r.productId,
+        name: r.productName,
+        spec: r.productSpec,
+        price: Number(r.unitPrice || 0).toFixed(2),
+        quantity: r.quantity,
+        emoji: r.orderItemEmoji || r.productEmoji || '🍃'
+      })
+      o.totalCount += r.quantity || 0
+    })
+
+    orders.value = Array.from(byOrder.values())
+    updateTabCounts()
+  } catch (e) {
+    console.error('订单加载失败', e)
+    showToast('订单加载失败，请检查登录状态')
+  } finally {
+    loading.value = false
+  }
+}
+
+const hasMore = ref(false)
+
+// 每次进入页面都重新拉取：下单后返回本页能看到新订单
+onShow(() => {
+  loadOrders()
+})
 
 // ============ 计算属性 ============
 const filteredOrders = computed(() => {
@@ -439,21 +396,17 @@ const filteredOrders = computed(() => {
   return orders.value.filter(order => order.status === currentTab.value)
 })
 
-// 更新标签计数
+// 更新标签计数（全部/已完成也按真实数据算，不再写死）
 const updateTabCounts = () => {
   const counts = {
+    all: orders.value.length,
     unpaid: orders.value.filter(o => o.status === 'unpaid').length,
     unship: orders.value.filter(o => o.status === 'unship').length,
     unreceive: orders.value.filter(o => o.status === 'unreceive').length,
-    unreview: orders.value.filter(o => o.status === 'unreview').length
+    unreview: orders.value.filter(o => o.status === 'unreview').length,
+    completed: orders.value.filter(o => o.status === 'completed').length
   }
-  
-  orderTabs.value = orderTabs.value.map(tab => {
-    if (tab.type !== 'all' && tab.type !== 'completed') {
-      return { ...tab, count: counts[tab.type] || 0 }
-    }
-    return tab
-  })
+  orderTabs.value = orderTabs.value.map(tab => ({ ...tab, count: counts[tab.type] || 0 }))
 }
 
 // ============ 交互方法 ============
