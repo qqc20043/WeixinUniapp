@@ -25,7 +25,7 @@
 		<!-- 消息区 -->
 		<main class="tea-content" id="msgList">
 			<div v-for="(m, i) in messages" :key="i" :class="['msg', m.role]">
-				<div class="bubble">{{ m.content }}<span v-if="m.typing" class="cursor">▍</span></div>
+				<div class="bubble"><text class="bubble-text" selectable user-select>{{ m.content }}</text><span v-if="m.typing" class="cursor">▍</span></div>
 				<!-- 工具调用事件：面试演示的关键画面 -->
 				<div v-if="m.tool" class="tool-tag">
 					🔧 调用工具：{{ m.tool }}
@@ -74,6 +74,35 @@
 					</div>
 					<!-- 按需求：不自动跳转，只给一个入口按钮 -->
 					<button class="cart-goto" @click="goCart">去购物车看看</button>
+				</div>
+				<!-- 推荐选购卡片：由后端 recommend_cards 事件驱动。
+					 用户点「选这个」→ 弹规格数量选择 → 直接拟单，全程不必再问规格。 -->
+				<div v-if="m.cards && m.cards.length" class="rec-wrap">
+					<div v-for="(c, ri) in m.cards" :key="ri" class="rec-card">
+						<div class="rec-top">
+							<span class="rec-emoji">{{ c.productEmoji || '🍵' }}</span>
+							<div class="rec-info">
+								<div class="rec-name">{{ c.productName }}</div>
+								<div class="rec-sub">{{ c.subtitle }}<span v-if="c.origin"> · {{ c.origin }}</span></div>
+							</div>
+						</div>
+						<div class="rec-specs">
+							<span v-for="(s, si) in c.specs" :key="si" class="rec-spec"
+								:class="{ on: recPick[c.productId] && recPick[c.productId].specId === s.specId }"
+								@click="pickSpec(c, s)">
+								{{ s.specName }} ¥{{ s.price }}
+							</span>
+						</div>
+						<div class="rec-actions">
+							<div class="rec-qty">
+								<span class="qty-btn" @click="recQty(c, -1)">−</span>
+								<span class="qty-num">{{ recQtyOf(c) }}</span>
+								<span class="qty-btn" @click="recQty(c, 1)">+</span>
+							</div>
+							<button class="rec-buy" :disabled="busy || !recPick[c.productId]"
+								@click="buyRecommended(c)">选这个</button>
+						</div>
+					</div>
 				</div>
 				<!-- 统计徽章 -->
 				<div v-if="m.stats" class="stats">
@@ -160,7 +189,8 @@
 		agentChat,
 		agentChatStream,
 		agentClearSession,
-		agentLlmInfo
+		agentLlmInfo,
+		agentHistory
 	} from '@/api/index.js'
 
 	/**
@@ -183,12 +213,55 @@
 	const busy = ref(false)
 	const llm = ref({})
 	const streamMode = ref(true)
-	const sessionId = ref('mp-' + Math.random().toString(36).slice(2, 8))
+	/**
+	 * 会话 id 持久化：退出页面再进来要能接上之前的对话。
+	 * 登录用户的记忆域其实由后端按 userId 决定（u{userId}），
+	 * 这里持久化主要是给匿名访客用（s{sessionId}），以及让前端有稳定的会话标识。
+	 */
+	const SESSION_KEY = 'agent_session_id'
+	const loadSessionId = () => {
+		try {
+			const saved = uni.getStorageSync(SESSION_KEY)
+			if (saved) return saved
+		} catch (e) { /* 忽略 */ }
+		const sid = 'mp-' + Math.random().toString(36).slice(2, 10)
+		try { uni.setStorageSync(SESSION_KEY, sid) } catch (e) { /* 忽略 */ }
+		return sid
+	}
+	const sessionId = ref(loadSessionId())
 	const quickChips = ref(['推荐几款绿茶', '送长辈什么茶合适', '明前龙井和雨前龙井的区别'])
+
+	/** 默认欢迎语（没有历史记录时展示） */
+	const WELCOME = '你好，我是漫思茶的智能茶饮顾问 🍵\n可以问我：\n· 推荐几款绿茶\n· 送长辈什么茶合适\n· 明前龙井和雨前龙井的区别'
 
 	onMounted(async () => {
 		llm.value = (await agentLlmInfo()) || { model: '连接失败', mock: false }
+		await restoreHistory()
+		scrollBottom()
 	})
+
+	/**
+	 * 恢复历史对话：退出页面再进来时，把之前的聊天记录拉回来。
+	 * 后端按 userId 查（登录用户跨会话共享），所以退出重进也能接上。
+	 * 拿到记录时**替换**掉默认欢迎语（避免每次都重复问候一遍）。
+	 */
+	const restoreHistory = async () => {
+		try {
+			const r = await agentHistory(sessionId.value)
+			const list = (r && r.messages) || []
+			if (!list.length) return
+			const restored = list.map(x => ({
+				role: x.role === 'user' ? 'user' : 'bot',
+				content: x.content || '',
+				typing: false, tool: '', stats: null,
+				confirmToken: '', confirmPhrase: '', confirmSummary: '',
+				order: {}, cart: null, cards: null
+			}))
+			messages.value = restored
+		} catch (e) {
+			// 拉取失败就用默认欢迎语，不打断使用
+		}
+	}
 
 	const scrollBottom = () => {
 		nextTick(() => {
@@ -201,7 +274,8 @@
 			role: 'bot', content: '', typing: true, tool: '', stats: null,
 			confirmToken: '', confirmPhrase: '', confirmSummary: '',
 			order: {},                      // 拟单明细（商品/规格/数量/金额/地址）
-			cart: null                      // 购物车快照（服务端 cart_snapshot 事件）
+			cart: null,                     // 购物车快照（服务端 cart_snapshot 事件）
+			cards: null                     // 推荐选购卡片（服务端 recommend_cards 事件）
 		})
 		return messages.value.length - 1
 	}
@@ -222,6 +296,44 @@
 				})
 			}
 		})
+	}
+
+	// ===== 推荐选购卡片 =====
+	/** 用户在各推荐卡上选中的规格：productId → spec 对象 */
+	const recPick = ref({})
+	/** 用户在各推荐卡上选择的数量：productId → 数量 */
+	const recQtyMap = ref({})
+
+	/** 选中某规格（默认选 isDefault=1 那条） */
+	const pickSpec = (card, spec) => {
+		recPick.value = { ...recPick.value, [card.productId]: spec }
+	}
+
+	/** 读某卡片当前数量（默认 1） */
+	const recQtyOf = (card) => recQtyMap.value[card.productId] || 1
+
+	/** 加减数量（1-10） */
+	const recQty = (card, delta) => {
+		const cur = recQtyOf(card)
+		const next = Math.min(10, Math.max(1, cur + delta))
+		recQtyMap.value = { ...recQtyMap.value, [card.productId]: next }
+	}
+
+	/**
+	 * 点「选这个」：直接把「商品 + 规格 + 数量」作为拟单指令发给后端。
+	 * 用结构化指令（而非自然语言）是为了让后端确定性地拟单，
+	 * 不必让模型再解析一遍"用户想要什么规格"——这正是这个卡片要省掉的那一步。
+	 */
+	const buyRecommended = (card) => {
+		if (busy.value) return
+		const spec = recPick.value[card.productId]
+		if (!spec) {
+			uni.showToast({ title: '请先选择规格', icon: 'none' })
+			return
+		}
+		const qty = recQtyOf(card)
+		input.value = '选购 ' + card.productId + ' ' + spec.specId + ' ' + qty
+		ask()
 	}
 
 	const askQuick = (text) => { input.value = text; ask() }
@@ -395,6 +507,23 @@
 			return
 		}
 
+		// 推荐选购卡片：模型推荐茶叶时推送，前端渲染成可点选列表
+		if (j && j.type === 'recommend_cards') {
+			m.cards = j.cards || []
+			// 默认选中每款茶的默认规格（isDefault=1），让用户少点一步
+			const picks = { ...recPick.value }
+			const qtys = { ...recQtyMap.value }
+			for (const c of m.cards) {
+				if (!picks[c.productId] && c.specs && c.specs.length) {
+					picks[c.productId] = c.specs.find(s => s.isDefault === 1) || c.specs[0]
+				}
+				if (!qtys[c.productId]) qtys[c.productId] = 1
+			}
+			recPick.value = picks
+			recQtyMap.value = qtys
+			return
+		}
+
 		// 购物车快照：加购/删除成功后服务端主动推，展示真实购物车内容
 		if (j && j.type === 'cart_snapshot') {
 			m.cart = {
@@ -467,8 +596,12 @@
 	}
 
 	const clearSession = async () => {
+		// 清空后换一个新 sessionId 并持久化；同时清服务端记忆。
+		// ⚠️ 登录用户的记忆域在后端是 u{userId}（跨会话共享），
+		// 只换前端 sessionId 是清不掉的——必须让后端按用户身份清（见 AgentChatController#clear）。
 		await agentClearSession(sessionId.value)
-		sessionId.value = 'mp-' + Math.random().toString(36).slice(2, 8)
+		sessionId.value = 'mp-' + Math.random().toString(36).slice(2, 10)
+		try { uni.setStorageSync(SESSION_KEY, sessionId.value) } catch (e) { /* 忽略 */ }
 		messages.value = [{ role: 'bot', content: '会话已清空，我们重新开始 🍵' }]
 	}
 
@@ -550,6 +683,15 @@
 		line-height: 1.7;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	/* 文字单独包一层 <text selectable>：小程序里只有 text 支持长按选中复制，
+	   div 里的文字默认不可选（实测用户反馈"agent 回复的文字不能复制"）。
+	   pre-wrap 必须放在 text 上，否则换行失效。 */
+	.bubble-text {
+		white-space: pre-wrap;
+		word-break: break-word;
+		user-select: text;
+		-webkit-user-select: text;
 	}
 	.msg.user .bubble {
 		background: #2C5E30;
@@ -636,6 +778,79 @@
 		font-size: 14px;
 	}
 	.oc-buy[disabled] { background: #A8B5A9; }
+
+	/* ---------- 推荐选购卡片（服务端 recommend_cards 事件驱动） ---------- */
+	.rec-wrap { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+	.rec-card {
+		background: #fff;
+		border: 1px solid rgba(44, 94, 48, .18);
+		border-radius: 12px;
+		padding: 12px;
+	}
+	.rec-top { display: flex; align-items: center; gap: 9px; }
+	.rec-emoji { font-size: 20px; flex-shrink: 0; }
+	.rec-info { flex: 1; min-width: 0; }
+	.rec-name { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+	.rec-sub { font-size: 11px; color: #8a8a8a; margin-top: 3px; }
+	.rec-specs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-top: 10px;
+	}
+	.rec-spec {
+		font-size: 11px;
+		padding: 5px 10px;
+		border-radius: 14px;
+		border: 1px solid rgba(44, 94, 48, .28);
+		color: #2C5E30;
+		background: rgba(44, 94, 48, .04);
+	}
+	.rec-spec.on {
+		background: #2C5E30;
+		color: #fff;
+		border-color: #2C5E30;
+	}
+	.rec-actions {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 11px;
+		gap: 10px;
+	}
+	.rec-qty { display: flex; align-items: center; gap: 0; }
+	.qty-btn {
+		width: 26px;
+		height: 26px;
+		line-height: 24px;
+		text-align: center;
+		border: 1px solid rgba(44, 94, 48, .3);
+		color: #2C5E30;
+		font-size: 15px;
+		box-sizing: border-box;
+	}
+	.qty-btn:first-child { border-radius: 6px 0 0 6px; }
+	.qty-btn:last-child { border-radius: 0 6px 6px 0; }
+	.qty-num {
+		min-width: 34px;
+		height: 26px;
+		line-height: 26px;
+		text-align: center;
+		font-size: 13px;
+		color: #1a1a1a;
+		border-top: 1px solid rgba(44, 94, 48, .3);
+		border-bottom: 1px solid rgba(44, 94, 48, .3);
+	}
+	.rec-buy {
+		flex: 1;
+		padding: 8px 0;
+		border: none;
+		border-radius: 16px;
+		background: #2C5E30;
+		color: #fff;
+		font-size: 13px;
+	}
+	.rec-buy[disabled] { background: #A8B5A9; }
 
 	/* ---------- 购物车卡片（服务端 cart_snapshot 事件驱动） ---------- */
 	.cart-card {

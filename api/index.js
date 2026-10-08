@@ -542,6 +542,25 @@ export const agentClearSession = (sessionId) => {
   });
 };
 
+/**
+ * 拉取当前用户的对话历史（退出页面再进入时恢复聊天记录）。
+ * 后端按「用户身份」查（登录用户记忆域是 u{userId}，跨会话共享），
+ * 所以退出重进、甚至换个页面再回来，都能拿到同一份记录。
+ * 未登录时退回按 sessionId 查，保证匿名访客也能看到本会话记录。
+ */
+export const agentHistory = (sessionId) => {
+  return new Promise((resolve) => {
+    uni.request({
+      url: AGENT_BASE_URL + '/api/agent/history',
+      method: 'GET',
+      header: agentHeaders(),
+      data: { sessionId },
+      success: (res) => resolve(res.statusCode === 200 ? (res.data || {}) : {}),
+      fail: () => resolve({})
+    });
+  });
+};
+
 /** 当前生效的 LLM 运行态（模型名 / 是否 Mock），用于前端徽章 */
 export const agentLlmInfo = () => {
   return new Promise((resolve) => {
