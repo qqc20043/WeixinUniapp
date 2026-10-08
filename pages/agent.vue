@@ -30,6 +30,15 @@
 				<div v-if="m.tool" class="tool-tag">
 					🔧 调用工具：{{ m.tool }}
 				</div>
+				<!-- 订单确认按钮：由后端 confirm_ready 事件驱动（携带一次性令牌）。
+					 不能靠文本里有没有「确认」来渲染——协议要求带令牌，猜测会渲染出无效按钮。 -->
+				<div v-if="m.confirmPhrase" class="confirm-box">
+					<div v-if="m.confirmSummary" class="confirm-summary">{{ m.confirmSummary }}</div>
+					<div class="confirm-actions">
+						<button class="confirm-yes" :disabled="busy" @click="sendConfirm(m.confirmPhrase)">确认下单</button>
+						<button class="confirm-no" :disabled="busy" @click="sendConfirm('取消订单，令牌 ' + m.confirmToken)">取消</button>
+					</div>
+				</div>
 				<!-- 统计徽章 -->
 				<div v-if="m.stats" class="stats">
 					<span class="chip">耗时 {{ m.stats.latencyMs }}ms</span>
@@ -98,11 +107,25 @@
 	}
 
 	const pushBot = () => {
-		messages.value.push({ role: 'bot', content: '', typing: true, tool: '', stats: null })
+		messages.value.push({
+			role: 'bot', content: '', typing: true, tool: '', stats: null,
+			confirmToken: '', confirmPhrase: '', confirmSummary: ''
+		})
 		return messages.value.length - 1
 	}
 
 	const askQuick = (text) => { input.value = text; ask() }
+
+	/**
+	 * 点击确认/取消按钮：把后端给的协议句原样发出去。
+	 * 协议句形如「确认下单，令牌 <hex>」——后端 AgentOrchestrator 的
+	 * CONFIRM_MSG_PATTERN 会直接匹配并**不经 LLM** 执行，确定且不会重复研究。
+	 */
+	const sendConfirm = (phrase) => {
+		if (busy.value) return
+		input.value = phrase
+		ask()
+	}
 
 	/** 鉴权失效的统一文案（与后端固定文案一致） */
 	const AUTH_EXPIRED_TEXT = '🔑 登录已过期，请重新登录后再继续，我在这等你回来。'
@@ -153,6 +176,24 @@
 		// auth_expired 之后后端仍会推固定文案的 delta + done，这里直接吞掉
 		if (authExpiredFired) {
 			if (event === 'done') { m.typing = false; m.stats = j }
+			return
+		}
+
+		// 订单拟单就绪：后端在 prepare_order 成功后推 confirm_ready（同样包在 tool 事件里，
+		// 靠 data.type 区分）。据此渲染带令牌的确认/取消按钮——
+		// 令牌是执行下单的唯一凭据，用户手打「确认」不带令牌是没法完成的。
+		if (j && j.type === 'confirm_ready') {
+			m.confirmToken = j.confirmToken || ''
+			m.confirmPhrase = j.confirmPhrase || ('确认下单，令牌 ' + (j.confirmToken || ''))
+			m.confirmSummary = j.summary || ''
+			return
+		}
+
+		// 用户说了确认类词汇但没带令牌，后端给的确定性引导（不经过 LLM）
+		if (j && j.type === 'confirm_guide') {
+			m.confirmToken = ''
+			m.confirmPhrase = ''
+			m.confirmSummary = ''
 			return
 		}
 
@@ -330,6 +371,37 @@
 		color: #2C5E30;
 		font-family: Consolas, monospace;
 	}
+
+	/* 订单确认区：只在后端 confirm_ready 事件到达时出现（带一次性令牌） */
+	.confirm-box {
+		margin-top: 8px;
+		border: 1px solid rgba(44, 94, 48, .3);
+		background: rgba(44, 94, 48, .05);
+		border-radius: 10px;
+		padding: 10px;
+	}
+	.confirm-summary {
+		font-size: 12px;
+		color: #2C5E30;
+		line-height: 1.5;
+		margin-bottom: 8px;
+	}
+	.confirm-actions { display: flex; gap: 8px; }
+	.confirm-yes, .confirm-no {
+		flex: 1;
+		font-size: 13px;
+		padding: 8px 0;
+		border-radius: 8px;
+		border: none;
+	}
+	.confirm-yes { background: #2C5E30; color: #fff; }
+	.confirm-yes[disabled] { background: #A8B5A9; }
+	.confirm-no {
+		background: transparent;
+		color: #8B5A2B;
+		border: 1px solid rgba(139, 90, 43, .4);
+	}
+	.confirm-no[disabled] { color: #A8B5A9; border-color: rgba(168, 181, 169, .5); }
 
 	.chips {
 		display: flex;
