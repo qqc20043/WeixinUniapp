@@ -39,6 +39,29 @@
 						<button class="confirm-no" :disabled="busy" @click="sendConfirm('取消订单，令牌 ' + m.confirmToken)">取消</button>
 					</div>
 				</div>
+				<!-- 收货地址选择卡片：由后端 confirm_address 事件驱动（下单前确认地址）。
+					 交互参考高德/千问：单选项 + 常用/公司标签 + 姓名电话 + 底部「新增收货地址」。 -->
+				<div v-if="m.addresses && m.addresses.length" class="addr-card">
+					<div class="addr-title">选择收货地址</div>
+					<div v-for="(a, ai) in m.addresses" :key="ai" class="addr-item"
+						:class="{ active: m.pickedAddressId === a.addressId }"
+						@click="pickAddress(m, a)">
+						<div class="addr-radio">
+							<span class="radio-dot" :class="{ on: m.pickedAddressId === a.addressId }"></span>
+						</div>
+						<div class="addr-body">
+							<div class="addr-line1">{{ a.fullAddress }}</div>
+							<div class="addr-line2">
+								<span v-if="a.tag" class="addr-tag" :class="{ corp: a.tag === '公司' }">{{ a.tag }}</span>
+								<span v-if="a.isDefault === 1" class="addr-tag default">常用</span>
+								<span class="addr-name">{{ a.name }}</span>
+								<span class="addr-phone">{{ a.phone }}</span>
+							</div>
+						</div>
+						<div class="addr-edit" @click.stop="editAddress(a)">✎</div>
+					</div>
+					<button class="addr-add" :disabled="busy" @click="addNewAddress">新增收货地址</button>
+				</div>
 				<!-- 统计徽章 -->
 				<div v-if="m.stats" class="stats">
 					<span class="chip">耗时 {{ m.stats.latencyMs }}ms</span>
@@ -109,7 +132,8 @@
 	const pushBot = () => {
 		messages.value.push({
 			role: 'bot', content: '', typing: true, tool: '', stats: null,
-			confirmToken: '', confirmPhrase: '', confirmSummary: ''
+			confirmToken: '', confirmPhrase: '', confirmSummary: '',
+			addresses: null, pickedAddressId: null
 		})
 		return messages.value.length - 1
 	}
@@ -125,6 +149,32 @@
 		if (busy.value) return
 		input.value = phrase
 		ask()
+	}
+
+	/**
+	 * 选中某个收货地址：标记后发出「用地址 <id>」协议句。
+	 * 后端 PICK_ADDRESS_PATTERN 解析出 addressId 交给 LLM 拟单，
+	 * 避免模型凭历史猜 id。
+	 */
+	const pickAddress = (m, a) => {
+		if (busy.value) return
+		m.pickedAddressId = a.addressId
+		input.value = '用地址 ' + a.addressId
+		ask()
+	}
+
+	/** 修改已有地址：引导用户直接在对话里报新信息（复用 add_address 代填能力） */
+	const editAddress = (a) => {
+		if (busy.value) return
+		input.value = '把收货地址改成：收货人 ' + a.name + '，电话 ' + a.phone + '，地址 '
+		uni.showToast({ title: '补齐新地址后发送即可', icon: 'none' })
+	}
+
+	/** 新增收货地址：同样走对话代填，保持单一入口 */
+	const addNewAddress = () => {
+		if (busy.value) return
+		input.value = '新增收货地址：收货人 ，电话 ，地址 '
+		uni.showToast({ title: '补齐收件人/电话/地址后发送', icon: 'none' })
 	}
 
 	/** 鉴权失效的统一文案（与后端固定文案一致） */
@@ -194,6 +244,17 @@
 			m.confirmToken = ''
 			m.confirmPhrase = ''
 			m.confirmSummary = ''
+			return
+		}
+
+		// 收货地址选择：后端在模型调 request_address_pick 后推 confirm_address，
+		// 带完整地址列表。渲染成可选卡片让用户点选，避免手打地址出错。
+		if (j && j.type === 'confirm_address') {
+			m.addresses = j.addresses || []
+			// 默认选中 isDefault=1 的那条，未标记则选第一条
+			const list = m.addresses
+			const def = list.find(x => x.isDefault === 1) || list[0]
+			m.pickedAddressId = def ? def.addressId : null
 			return
 		}
 
@@ -402,6 +463,87 @@
 		border: 1px solid rgba(139, 90, 43, .4);
 	}
 	.confirm-no[disabled] { color: #A8B5A9; border-color: rgba(168, 181, 169, .5); }
+
+	/* ---------- 收货地址选择卡片（参考高德/千问） ---------- */
+	.addr-card {
+		margin-top: 8px;
+		background: #fff;
+		border-radius: 12px;
+		border: 1px solid rgba(44, 94, 48, .15);
+		overflow: hidden;
+	}
+	.addr-title {
+		font-size: 15px;
+		font-weight: 600;
+		color: #1a1a1a;
+		padding: 14px 14px 6px;
+	}
+	.addr-item {
+		display: flex;
+		align-items: flex-start;
+		padding: 12px 14px;
+		border-bottom: 1px solid rgba(0, 0, 0, .05);
+	}
+	.addr-item.active { background: rgba(44, 94, 48, .04); }
+	.addr-radio { width: 22px; flex-shrink: 0; padding-top: 2px; }
+	.radio-dot {
+		display: block;
+		width: 17px;
+		height: 17px;
+		border-radius: 50%;
+		border: 1.5px solid #c8c8c8;
+		box-sizing: border-box;
+	}
+	.radio-dot.on {
+		border-color: #2C5E30;
+		background: #2C5E30;
+		box-shadow: inset 0 0 0 3.5px #fff;
+	}
+	.addr-body { flex: 1; min-width: 0; }
+	.addr-line1 {
+		font-size: 14px;
+		color: #1a1a1a;
+		line-height: 1.4;
+		word-break: break-all;
+	}
+	.addr-line2 {
+		margin-top: 5px;
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 6px;
+		font-size: 12px;
+		color: #8a8a8a;
+	}
+	.addr-tag {
+		font-size: 10px;
+		padding: 1px 5px;
+		border-radius: 3px;
+		background: rgba(44, 94, 48, .1);
+		color: #2C5E30;
+	}
+	.addr-tag.corp { background: rgba(43, 96, 205, .1); color: #2b60cd; }
+	.addr-tag.default { background: rgba(255, 145, 0, .12); color: #e07b00; }
+	.addr-name { color: #555; }
+	.addr-phone { color: #8a8a8a; }
+	.addr-edit {
+		flex-shrink: 0;
+		padding: 0 2px 0 10px;
+		color: #b0b0b0;
+		font-size: 15px;
+	}
+	.addr-add {
+		display: block;
+		width: calc(100% - 28px);
+		margin: 12px 14px 14px;
+		padding: 11px 0;
+		border: none;
+		border-radius: 22px;
+		background: #2C5E30;
+		color: #fff;
+		font-size: 14px;
+	}
+	.addr-add[disabled] { background: #A8B5A9; }
 
 	.chips {
 		display: flex;
