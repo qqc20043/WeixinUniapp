@@ -52,6 +52,29 @@
 					</div>
 					<button class="oc-buy" :disabled="busy" @click="openOrderSheet(m)">确认下单</button>
 				</div>
+				<!-- 购物车卡片：由后端 cart_snapshot 事件驱动（加购/删除成功后服务端主动推）。
+					 为什么由服务端推：模型有时只用文字说「已加入购物车」却没真调工具，
+					 用户无从判断到底加没加。这里展示的是服务端真实查到的购物车快照。 -->
+				<div v-if="m.cart && m.cart.items && m.cart.items.length" class="cart-card">
+					<div class="cart-head">
+						<span class="cart-title">🛒 购物车</span>
+						<span class="cart-count">{{ m.cart.count }} 件</span>
+					</div>
+					<div v-for="(it, ci) in m.cart.items" :key="ci" class="cart-item">
+						<span class="cart-emoji">{{ it.productEmoji || '🍵' }}</span>
+						<div class="cart-info">
+							<div class="cart-name">{{ it.productName }}</div>
+							<div class="cart-spec">{{ it.specName }} × {{ it.quantity }}</div>
+						</div>
+						<span class="cart-price">¥{{ it.subtotal }}</span>
+					</div>
+					<div class="cart-total">
+						<span>合计</span>
+						<span class="cart-total-price">¥{{ m.cart.totalPrice }}</span>
+					</div>
+					<!-- 按需求：不自动跳转，只给一个入口按钮 -->
+					<button class="cart-goto" @click="goCart">去购物车看看</button>
+				</div>
 				<!-- 统计徽章 -->
 				<div v-if="m.stats" class="stats">
 					<span class="chip">耗时 {{ m.stats.latencyMs }}ms</span>
@@ -177,9 +200,28 @@
 		messages.value.push({
 			role: 'bot', content: '', typing: true, tool: '', stats: null,
 			confirmToken: '', confirmPhrase: '', confirmSummary: '',
-			order: {}                       // 拟单明细（商品/规格/数量/金额/地址），供下单卡片与弹窗使用
+			order: {},                      // 拟单明细（商品/规格/数量/金额/地址）
+			cart: null                      // 购物车快照（服务端 cart_snapshot 事件）
 		})
 		return messages.value.length - 1
+	}
+
+	/**
+	 * 跳购物车。
+	 * ⚠️ pages.json 里**没有 tabBar**（本项目用自定义底部导航），所以 gowuc 是普通页面，
+	 * 必须用 navigateTo；用 switchTab 会直接 fail（实测过这个坑）。
+	 */
+	const goCart = () => {
+		uni.navigateTo({
+			url: '/pages/gowuc',
+			fail: () => {
+				// 兜底：万一页面栈超过 10 层，先回退再跳
+				uni.navigateBack({
+					delta: 1,
+					complete: () => uni.navigateTo({ url: '/pages/gowuc' })
+				})
+			}
+		})
 	}
 
 	const askQuick = (text) => { input.value = text; ask() }
@@ -350,6 +392,17 @@
 		if (j && j.type === 'confirm_address') {
 			addrPicker.value.list = j.addresses || []
 			addrPicker.value.show = true
+			return
+		}
+
+		// 购物车快照：加购/删除成功后服务端主动推，展示真实购物车内容
+		if (j && j.type === 'cart_snapshot') {
+			m.cart = {
+				count: j.count || 0,
+				totalPrice: j.totalPrice || 0,
+				justAdded: !!j.justAdded,
+				items: j.items || []
+			}
 			return
 		}
 
@@ -583,6 +636,62 @@
 		font-size: 14px;
 	}
 	.oc-buy[disabled] { background: #A8B5A9; }
+
+	/* ---------- 购物车卡片（服务端 cart_snapshot 事件驱动） ---------- */
+	.cart-card {
+		margin-top: 8px;
+		background: #fff;
+		border: 1px solid rgba(44, 94, 48, .18);
+		border-radius: 12px;
+		padding: 12px;
+	}
+	.cart-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding-bottom: 8px;
+		border-bottom: 1px solid rgba(0, 0, 0, .06);
+	}
+	.cart-title { font-size: 14px; font-weight: 600; color: #2C5E30; }
+	.cart-count { font-size: 12px; color: #8a8a8a; }
+	.cart-item {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding: 9px 0;
+		border-bottom: 1px dashed rgba(0, 0, 0, .06);
+	}
+	.cart-emoji { font-size: 18px; flex-shrink: 0; }
+	.cart-info { flex: 1; min-width: 0; }
+	.cart-name {
+		font-size: 13px;
+		color: #1a1a1a;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.cart-spec { font-size: 11px; color: #8a8a8a; margin-top: 3px; }
+	.cart-price { font-size: 13px; color: #c75000; font-weight: 600; flex-shrink: 0; }
+	.cart-total {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		padding-top: 10px;
+		font-size: 12px;
+		color: #8a8a8a;
+	}
+	.cart-total-price { font-size: 17px; color: #c75000; font-weight: 700; }
+	.cart-goto {
+		display: block;
+		width: 100%;
+		margin-top: 10px;
+		padding: 9px 0;
+		border: 1px solid rgba(44, 94, 48, .45);
+		border-radius: 18px;
+		background: transparent;
+		color: #2C5E30;
+		font-size: 13px;
+	}
 
 	/* ---------- 底部弹层（下单窗口 / 地址选择） ---------- */
 	.sheet { padding: 18px 16px 24px; }
