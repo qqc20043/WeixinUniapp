@@ -30,24 +30,74 @@
 				<div v-if="m.tool" class="tool-tag">
 					🔧 调用工具：{{ m.tool }}
 				</div>
-				<!-- 订单确认按钮：由后端 confirm_ready 事件驱动（携带一次性令牌）。
-					 不能靠文本里有没有「确认」来渲染——协议要求带令牌，猜测会渲染出无效按钮。 -->
-				<div v-if="m.confirmPhrase" class="confirm-box">
-					<div v-if="m.confirmSummary" class="confirm-summary">{{ m.confirmSummary }}</div>
-					<div class="confirm-actions">
-						<button class="confirm-yes" :disabled="busy" @click="sendConfirm(m.confirmPhrase)">确认下单</button>
-						<button class="confirm-no" :disabled="busy" @click="sendConfirm('取消订单，令牌 ' + m.confirmToken)">取消</button>
+				<!-- 订单拟单卡片：由后端 confirm_ready 事件驱动（携带一次性令牌）。
+					 交互对齐千问：消息里直接展示「商品/规格/数量/金额 + 当前地址（可点修改）」，
+					 并给一个按钮唤起下单小窗口——用户只在下单窗口里确认一次。
+					 不能靠文本里有没有「确认」来渲染，靠结构化事件才可靠。 -->
+				<div v-if="m.confirmPhrase" class="order-card">
+					<div class="oc-row">
+						<span class="oc-emoji">{{ m.order.emoji || '🍵' }}</span>
+						<span class="oc-name">{{ m.order.productName || m.confirmSummary }}</span>
 					</div>
+					<div class="oc-meta">
+						<span>{{ m.order.specName }}</span>
+						<span>× {{ m.order.quantity }}</span>
+						<span class="oc-price">¥{{ m.order.subtotal }}</span>
+					</div>
+					<!-- 当前收货地址：只展示一行，点「修改」才弹层 -->
+					<div class="oc-addr">
+						<span class="oc-addr-label">送至</span>
+						<span class="oc-addr-text">{{ m.order.addressSummary }}</span>
+						<span class="oc-addr-edit" @click="openAddrPicker(m)">修改</span>
+					</div>
+					<button class="oc-buy" :disabled="busy" @click="openOrderSheet(m)">确认下单</button>
 				</div>
-				<!-- 收货地址选择卡片：由后端 confirm_address 事件驱动（下单前确认地址）。
-					 交互参考高德/千问：单选项 + 常用/公司标签 + 姓名电话 + 底部「新增收货地址」。 -->
-				<div v-if="m.addresses && m.addresses.length" class="addr-card">
-					<div class="addr-title">选择收货地址</div>
-					<div v-for="(a, ai) in m.addresses" :key="ai" class="addr-item"
-						:class="{ active: m.pickedAddressId === a.addressId }"
-						@click="pickAddress(m, a)">
+				<!-- 统计徽章 -->
+				<div v-if="m.stats" class="stats">
+					<span class="chip">耗时 {{ m.stats.latencyMs }}ms</span>
+					<span class="chip">tokens {{ m.stats.promptTokens }}+{{ m.stats.completionTokens }}</span>
+					<span class="chip">¥{{ m.stats.costYuan }}</span>
+				</div>
+			</div>
+		</main>
+
+		<!-- ========== 下单确认小窗口（对齐千问：一处确认即可完成购买） ========== -->
+		<van-popup :show="orderSheet.show" @close="orderSheet.show = false" round position="bottom" :z-index="2000">
+			<div class="sheet">
+				<div class="sheet-title">确认订单</div>
+				<div class="sheet-goods">
+					<div class="sheet-emoji">{{ orderSheet.emoji || '🍵' }}</div>
+					<div class="sheet-goods-info">
+						<div class="sheet-goods-name">{{ orderSheet.productName }}</div>
+						<div class="sheet-goods-spec">{{ orderSheet.specName }} × {{ orderSheet.quantity }}</div>
+					</div>
+					<div class="sheet-goods-price">¥{{ orderSheet.subtotal }}</div>
+				</div>
+				<div class="sheet-line" @click="openAddrPicker(null)">
+					<span class="sheet-line-label">收货地址</span>
+					<span class="sheet-line-value">{{ orderSheet.addressSummary || '未选择' }}</span>
+					<span class="sheet-line-edit">修改</span>
+				</div>
+				<div class="sheet-total">
+					<span>合计</span>
+					<span class="sheet-total-price">¥{{ orderSheet.subtotal }}</span>
+				</div>
+				<button class="sheet-pay" :disabled="busy" @click="doBuy">
+					{{ busy ? '处理中…' : '确认购买' }}
+				</button>
+			</div>
+		</van-popup>
+
+		<!-- ========== 收货地址弹层（列表选择 + 新增） ========== -->
+		<van-popup :show="addrPicker.show" @close="addrPicker.show = false" round position="bottom" :z-index="2100">
+			<div class="sheet">
+				<div class="sheet-title">选择收货地址</div>
+				<div class="addr-list">
+					<div v-for="(a, ai) in addrPicker.list" :key="ai" class="addr-item"
+						:class="{ active: addrPicker.picked === a.addressId }"
+						@click="chooseAddress(a)">
 						<div class="addr-radio">
-							<span class="radio-dot" :class="{ on: m.pickedAddressId === a.addressId }"></span>
+							<span class="radio-dot" :class="{ on: addrPicker.picked === a.addressId }"></span>
 						</div>
 						<div class="addr-body">
 							<div class="addr-line1">{{ a.fullAddress }}</div>
@@ -58,18 +108,12 @@
 								<span class="addr-phone">{{ a.phone }}</span>
 							</div>
 						</div>
-						<div class="addr-edit" @click.stop="editAddress(a)">✎</div>
 					</div>
-					<button class="addr-add" :disabled="busy" @click="addNewAddress">新增收货地址</button>
+					<div v-if="!addrPicker.list.length" class="addr-empty">暂无收货地址</div>
 				</div>
-				<!-- 统计徽章 -->
-				<div v-if="m.stats" class="stats">
-					<span class="chip">耗时 {{ m.stats.latencyMs }}ms</span>
-					<span class="chip">tokens {{ m.stats.promptTokens }}+{{ m.stats.completionTokens }}</span>
-					<span class="chip">¥{{ m.stats.costYuan }}</span>
-				</div>
+				<button class="sheet-pay ghost" :disabled="busy" @click="addNewAddress">新增收货地址</button>
 			</div>
-		</main>
+		</van-popup>
 
 		<!-- 快捷问题 -->
 		<div class="chips">
@@ -133,47 +177,77 @@
 		messages.value.push({
 			role: 'bot', content: '', typing: true, tool: '', stats: null,
 			confirmToken: '', confirmPhrase: '', confirmSummary: '',
-			addresses: null, pickedAddressId: null
+			order: {}                       // 拟单明细（商品/规格/数量/金额/地址），供下单卡片与弹窗使用
 		})
 		return messages.value.length - 1
 	}
 
 	const askQuick = (text) => { input.value = text; ask() }
 
+	// ===== 下单小窗口 =====
+	const orderSheet = ref({
+		show: false, phrase: '', token: '',
+		productName: '', emoji: '', specName: '', quantity: 1, subtotal: 0, addressSummary: ''
+	})
+	/** 地址弹层：列表选择 + 新增 */
+	const addrPicker = ref({ show: false, list: [], picked: null, targetMsg: null })
+
 	/**
-	 * 点击确认/取消按钮：把后端给的协议句原样发出去。
-	 * 协议句形如「确认下单，令牌 <hex>」——后端 AgentOrchestrator 的
-	 * CONFIRM_MSG_PATTERN 会直接匹配并**不经 LLM** 执行，确定且不会重复研究。
+	 * 唤起下单窗口。用户在这里**只确认一次**：确认购买即发出协议句，
+	 * 后端 PICK/CONFIRM 正则直接执行，不再来回追问。
 	 */
-	const sendConfirm = (phrase) => {
+	const openOrderSheet = (m) => {
 		if (busy.value) return
-		input.value = phrase
+		orderSheet.value = {
+			show: true,
+			phrase: m.confirmPhrase,
+			token: m.confirmToken,
+			productName: m.order.productName || '',
+			emoji: m.order.emoji || '🍵',
+			specName: m.order.specName || '',
+			quantity: m.order.quantity || 1,
+			subtotal: m.order.subtotal || 0,
+			addressSummary: m.order.addressSummary || ''
+		}
+	}
+
+	/** 窗口内点「确认购买」→ 发协议句，后端不经 LLM 直接下单 */
+	const doBuy = () => {
+		if (busy.value || !orderSheet.value.phrase) return
+		orderSheet.value.show = false
+		input.value = orderSheet.value.phrase
 		ask()
 	}
 
-	/**
-	 * 选中某个收货地址：标记后发出「用地址 <id>」协议句。
-	 * 后端 PICK_ADDRESS_PATTERN 解析出 addressId 交给 LLM 拟单，
-	 * 避免模型凭历史猜 id。
-	 */
-	const pickAddress = (m, a) => {
+	/** 打开地址弹层：向后端要地址列表（走「用地址」协议的同源工具） */
+	const openAddrPicker = (m) => {
 		if (busy.value) return
-		m.pickedAddressId = a.addressId
+		addrPicker.value = { show: true, list: [], picked: orderSheet.value.addressId || null, targetMsg: m }
+		// 复用已有事件数据：若消息里带过地址列表就直接用
+		if (m && m.addresses && m.addresses.length) {
+			addrPicker.value.list = m.addresses
+			return
+		}
+		// 否则请求一次（发「换地址」触发后端 request_address_pick）
+		input.value = '换地址'
+		ask()
+	}
+
+	/** 选中地址：若在下单窗口上下文中，直接重新拟单（带上新地址）；否则仅记录 */
+	const chooseAddress = (a) => {
+		addrPicker.value.picked = a.addressId
+		addrPicker.value.show = false
+		if (busy.value) return
+		// 「用地址 <id>」会触发后端重新拟单（并作废旧令牌），拿到新令牌后再次弹出下单窗口
 		input.value = '用地址 ' + a.addressId
 		ask()
 	}
 
-	/** 修改已有地址：引导用户直接在对话里报新信息（复用 add_address 代填能力） */
-	const editAddress = (a) => {
-		if (busy.value) return
-		input.value = '把收货地址改成：收货人 ' + a.name + '，电话 ' + a.phone + '，地址 '
-		uni.showToast({ title: '补齐新地址后发送即可', icon: 'none' })
-	}
-
-	/** 新增收货地址：同样走对话代填，保持单一入口 */
+	/** 新增收货地址：复用 add_address 的对话代填，预填模板 */
 	const addNewAddress = () => {
+		addrPicker.value.show = false
 		if (busy.value) return
-		input.value = '新增收货地址：收货人 ，电话 ，地址 '
+		input.value = '收货人 ，电话 ，地址 '
 		uni.showToast({ title: '补齐收件人/电话/地址后发送', icon: 'none' })
 	}
 
@@ -229,13 +303,37 @@
 			return
 		}
 
-		// 订单拟单就绪：后端在 prepare_order 成功后推 confirm_ready（同样包在 tool 事件里，
-		// 靠 data.type 区分）。据此渲染带令牌的确认/取消按钮——
-		// 令牌是执行下单的唯一凭据，用户手打「确认」不带令牌是没法完成的。
+		// 订单拟单就绪：后端在 prepare_order 成功后推 confirm_ready，一次带全
+		// 商品/规格/数量/单价/合计/收货地址，供消息卡片与下单窗口使用（用户只确认一次）。
 		if (j && j.type === 'confirm_ready') {
 			m.confirmToken = j.confirmToken || ''
 			m.confirmPhrase = j.confirmPhrase || ('确认下单，令牌 ' + (j.confirmToken || ''))
 			m.confirmSummary = j.summary || ''
+			m.order = {
+				productName: j.productName || '',
+				emoji: j.productEmoji || '🍵',
+				specName: j.specName || '',
+				quantity: j.quantity || 1,
+				unitPrice: j.unitPrice || 0,
+				subtotal: j.subtotal || 0,
+				addressId: j.addressId || 0,
+				addressSummary: j.addressSummary || ''
+			}
+			// 拟单即自动弹出下单窗口——用户在这里一次确认完成购买（对齐千问）
+			const bot = messages.value[messages.value.length - 1]
+			if (bot) {
+				orderSheet.value = {
+					show: true,
+					phrase: m.confirmPhrase,
+					token: m.confirmToken,
+					productName: m.order.productName,
+					emoji: m.order.emoji,
+					specName: m.order.specName,
+					quantity: m.order.quantity,
+					subtotal: m.order.subtotal,
+					addressSummary: m.order.addressSummary
+				}
+			}
 			return
 		}
 
@@ -244,17 +342,20 @@
 			m.confirmToken = ''
 			m.confirmPhrase = ''
 			m.confirmSummary = ''
+			m.order = {}
 			return
 		}
 
-		// 收货地址选择：后端在模型调 request_address_pick 后推 confirm_address，
-		// 带完整地址列表。渲染成可选卡片让用户点选，避免手打地址出错。
+		// 地址列表（响应「换地址」）→ 填进地址弹层
 		if (j && j.type === 'confirm_address') {
-			m.addresses = j.addresses || []
-			// 默认选中 isDefault=1 的那条，未标记则选第一条
-			const list = m.addresses
-			const def = list.find(x => x.isDefault === 1) || list[0]
-			m.pickedAddressId = def ? def.addressId : null
+			addrPicker.value.list = j.addresses || []
+			addrPicker.value.show = true
+			return
+		}
+
+		// 拟单后的地址一句话（可点修改）—— 已并入 confirm_ready，这里只作兜底
+		if (j && j.type === 'address_line') {
+			if (m.order) m.order.addressSummary = j.addressSummary || m.order.addressSummary
 			return
 		}
 
@@ -433,55 +534,127 @@
 		font-family: Consolas, monospace;
 	}
 
-	/* 订单确认区：只在后端 confirm_ready 事件到达时出现（带一次性令牌） */
-	.confirm-box {
-		margin-top: 8px;
-		border: 1px solid rgba(44, 94, 48, .3);
-		background: rgba(44, 94, 48, .05);
-		border-radius: 10px;
-		padding: 10px;
-	}
-	.confirm-summary {
-		font-size: 12px;
-		color: #2C5E30;
-		line-height: 1.5;
-		margin-bottom: 8px;
-	}
-	.confirm-actions { display: flex; gap: 8px; }
-	.confirm-yes, .confirm-no {
-		flex: 1;
-		font-size: 13px;
-		padding: 8px 0;
-		border-radius: 8px;
-		border: none;
-	}
-	.confirm-yes { background: #2C5E30; color: #fff; }
-	.confirm-yes[disabled] { background: #A8B5A9; }
-	.confirm-no {
-		background: transparent;
-		color: #8B5A2B;
-		border: 1px solid rgba(139, 90, 43, .4);
-	}
-	.confirm-no[disabled] { color: #A8B5A9; border-color: rgba(168, 181, 169, .5); }
-
-	/* ---------- 收货地址选择卡片（参考高德/千问） ---------- */
-	.addr-card {
+	/* ---------- 订单拟单卡片：商品 + 地址一行（可点修改）+ 确认下单按钮 ---------- */
+	.order-card {
 		margin-top: 8px;
 		background: #fff;
+		border: 1px solid rgba(44, 94, 48, .18);
 		border-radius: 12px;
-		border: 1px solid rgba(44, 94, 48, .15);
-		overflow: hidden;
+		padding: 12px;
 	}
-	.addr-title {
-		font-size: 15px;
+	.oc-row { display: flex; align-items: center; gap: 6px; }
+	.oc-emoji { font-size: 16px; }
+	.oc-name { font-size: 14px; color: #1a1a1a; font-weight: 600; }
+	.oc-meta {
+		margin-top: 6px;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-size: 12px;
+		color: #8a8a8a;
+	}
+	.oc-price { color: #c75000; font-weight: 600; }
+	.oc-addr {
+		margin-top: 9px;
+		padding-top: 9px;
+		border-top: 1px dashed rgba(0, 0, 0, .08);
+		display: flex;
+		align-items: flex-start;
+		gap: 6px;
+		font-size: 12px;
+	}
+	.oc-addr-label { color: #8a8a8a; flex-shrink: 0; }
+	.oc-addr-text { color: #444; flex: 1; line-height: 1.5; word-break: break-all; }
+	.oc-addr-edit {
+		flex-shrink: 0;
+		color: #2C5E30;
+		font-weight: 600;
+		padding-left: 4px;
+	}
+	.oc-buy {
+		display: block;
+		width: 100%;
+		margin-top: 11px;
+		padding: 10px 0;
+		border: none;
+		border-radius: 20px;
+		background: #2C5E30;
+		color: #fff;
+		font-size: 14px;
+	}
+	.oc-buy[disabled] { background: #A8B5A9; }
+
+	/* ---------- 底部弹层（下单窗口 / 地址选择） ---------- */
+	.sheet { padding: 18px 16px 24px; }
+	.sheet-title {
+		font-size: 16px;
 		font-weight: 600;
 		color: #1a1a1a;
-		padding: 14px 14px 6px;
+		text-align: center;
+		margin-bottom: 14px;
 	}
+	.sheet-goods {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 12px;
+		background: #f7f7f7;
+		border-radius: 10px;
+	}
+	.sheet-emoji { font-size: 22px; }
+	.sheet-goods-info { flex: 1; min-width: 0; }
+	.sheet-goods-name { font-size: 14px; color: #1a1a1a; font-weight: 600; }
+	.sheet-goods-spec { font-size: 12px; color: #8a8a8a; margin-top: 3px; }
+	.sheet-goods-price { font-size: 15px; color: #c75000; font-weight: 600; }
+	.sheet-line {
+		margin-top: 12px;
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		font-size: 13px;
+		padding: 10px 12px;
+		border: 1px solid rgba(0, 0, 0, .07);
+		border-radius: 10px;
+	}
+	.sheet-line-label { color: #8a8a8a; flex-shrink: 0; }
+	.sheet-line-value { flex: 1; color: #333; line-height: 1.5; word-break: break-all; }
+	.sheet-line-edit { flex-shrink: 0; color: #2C5E30; font-weight: 600; }
+	.sheet-total {
+		margin-top: 14px;
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		font-size: 13px;
+		color: #8a8a8a;
+	}
+	.sheet-total-price { font-size: 20px; color: #c75000; font-weight: 700; }
+	.sheet-pay {
+		display: block;
+		width: 100%;
+		margin-top: 16px;
+		padding: 13px 0;
+		border: none;
+		border-radius: 24px;
+		background: #2C5E30;
+		color: #fff;
+		font-size: 16px;
+		font-weight: 600;
+	}
+	.sheet-pay[disabled] { background: #A8B5A9; }
+	.sheet-pay.ghost {
+		background: transparent;
+		color: #2C5E30;
+		border: 1px solid rgba(44, 94, 48, .45);
+		font-size: 14px;
+		padding: 11px 0;
+	}
+
+	/* ---------- 地址列表（弹层内复用） ---------- */
+	.addr-list { max-height: 46vh; overflow-y: auto; }
 	.addr-item {
 		display: flex;
 		align-items: flex-start;
-		padding: 12px 14px;
+		padding: 12px 4px;
 		border-bottom: 1px solid rgba(0, 0, 0, .05);
 	}
 	.addr-item.active { background: rgba(44, 94, 48, .04); }
@@ -526,24 +699,12 @@
 	.addr-tag.default { background: rgba(255, 145, 0, .12); color: #e07b00; }
 	.addr-name { color: #555; }
 	.addr-phone { color: #8a8a8a; }
-	.addr-edit {
-		flex-shrink: 0;
-		padding: 0 2px 0 10px;
-		color: #b0b0b0;
-		font-size: 15px;
+	.addr-empty {
+		text-align: center;
+		color: #999;
+		font-size: 13px;
+		padding: 30px 0;
 	}
-	.addr-add {
-		display: block;
-		width: calc(100% - 28px);
-		margin: 12px 14px 14px;
-		padding: 11px 0;
-		border: none;
-		border-radius: 22px;
-		background: #2C5E30;
-		color: #fff;
-		font-size: 14px;
-	}
-	.addr-add[disabled] { background: #A8B5A9; }
 
 	.chips {
 		display: flex;
