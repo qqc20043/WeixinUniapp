@@ -358,6 +358,21 @@ export const insertOrderItemData = (data) => {
   });
 };
 
+/**
+ * 取消订单（真正落库）。
+ *
+ * 为什么需要：原先前端「取消订单」只把本地数组里那条 splice 掉（纯 UI 假动作），
+ * 数据库状态没变，用户下次进页面又看到同一笔未付款订单。
+ * 后端 order/CancelOrder 会校验「本人 + 未发货」并置 status=cancelled。
+ */
+export const cancelOrder = (orderId, reason) => {
+  return request({
+    url: '/order/CancelOrder',
+    method: 'post',
+    data: { orderId, reason }
+  });
+};
+
 // 获取验证码
 export const userCaptcha = () => {
   return request({

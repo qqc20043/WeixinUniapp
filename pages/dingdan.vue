@@ -243,7 +243,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { VOrderItemDetail } from '@/api/index.js'
+import { VOrderItemDetail, cancelOrder } from '@/api/index.js'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 
 // ============ 状态定义 ============
@@ -461,22 +461,44 @@ const closeCancelModal = () => {
   selectedCancelReason.value = ''
 }
 
-const confirmCancel = () => {
+/**
+ * 确认取消订单。
+ *
+ * ⚠️ 这里原来是「纯 UI 假动作」：只把本地数组里那条 splice 掉就提示成功，
+ * 数据库状态从未改变 —— 用户下次进页面又看到同一笔未付款订单（实测 bug）。
+ * 现在改为真正调用后端 /order/CancelOrder，成功后才更新界面；
+ * 后端会校验「本人 + 未发货」，失败（如已发货/越权）时如实提示，不假装成功。
+ */
+const confirmCancel = async () => {
   if (!selectedCancelReason.value) {
     showToast('请选择取消原因')
     return
   }
-
-  // 找到并移除订单
-  const orderIndex = orders.value.findIndex(o => o.id === currentOrderId.value)
-  if (orderIndex !== -1) {
-    const reason = cancelReasons.value.find(r => r.value === selectedCancelReason.value).label
-    orders.value.splice(orderIndex, 1)
-    updateTabCounts()
-    showToast(`订单已取消，原因：${reason}`)
+  const reason = cancelReasons.value.find(r => r.value === selectedCancelReason.value).label
+  const orderId = currentOrderId.value
+  if (!orderId) {
+    closeCancelModal()
+    return
   }
-  
-  closeCancelModal()
+
+  try {
+    const res = await cancelOrder(orderId, reason)
+    // 老项目 Result：code===200 表示成功
+    if (res && res.code === 200) {
+      const orderIndex = orders.value.findIndex(o => o.id === orderId)
+      if (orderIndex !== -1) {
+        orders.value.splice(orderIndex, 1)
+        updateTabCounts()
+      }
+      showToast(`订单已取消，原因：${reason}`)
+      closeCancelModal()
+    } else {
+      // 后端拒绝（例如订单已发货、无权操作）——如实告知，不要静默吞掉
+      showToast((res && res.msg) || '取消失败，请稍后重试')
+    }
+  } catch (e) {
+    showToast('取消失败，请检查网络后重试')
+  }
 }
 
 // ============ 支付功能 ============
