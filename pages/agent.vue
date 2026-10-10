@@ -1077,24 +1077,33 @@
 
 
 
+
+
+
+
 	/* #ifdef H5 */
 	/* ========== H5 适配：PC 端统一 360px 居中（仅网页端，小程序零影响） ==========
 	   为什么是 360px：与登录页 .phone-frame 的 min(360px, 92vw) 保持一致，
-	   整个站点在电脑上呈现为「一部手机居中」的形态，而不是铺满宽屏。
-	   手机端（<=768px）不加任何覆盖，完全沿用原设计。
+	   整个站点在电脑上呈现为「一部手机居中」的形态。手机端（<=768px）不加覆盖。
 	*/
 	@media screen and (min-width: 769px) {
-		.tea-app { max-width: 360px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
+		/* ⚠️ agent.vue 的 .tea-app 原本没有 margin:0 auto（其它页面有），
+		   只加 max-width 会导致内容靠左而不是居中，必须补上。 */
+		.tea-app { max-width: 360px; margin: 0 auto; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
 		.paper-texture { width: 360px; }
-	}
-	/* 固定定位元素（底部导航/输入栏/浮动按钮等）原本贴视口边缘，
-	   宽屏下会跑到内容区外（实测 1920px 时「问茶」按钮贴到屏幕最右侧）。
-	   用 right 定位的元素不能用 margin:auto（fixed 下 right 优先），
-	   必须改成「视口宽 - 内容区宽)/2 + 原偏移」。 */
-	@media screen and (min-width: 769px) {
-	@media screen and (min-width: 769px) {
-		.input-bar { max-width: 360px; margin: 0 auto; }
-	}
+		/* .chips 有 padding:8px 16px，不加 border-box 时实际宽度会变成 360+32=392，超出内容区 */
+		.chips { max-width: 360px; margin: 0 auto; box-sizing: border-box; }
+		/* ⚠️ .input-bar 用 left:0; right:0 撑满视口，margin:auto 对它无效
+		   （fixed 下 left/right 优先于 margin）。
+		   这里用 left:50% + margin-left:-180px（半宽）居中——比 calc(100vw-...) 更准：
+		   100vw 含滚动条宽度而 clientWidth 不含，会导致固定定位元素偏几像素。 */
+		.input-bar {
+			left: 50%; margin-left: -180px;
+			right: auto; width: 360px;
+			/* content-box 下 width:360 会再加 padding 32px 变成 392，超出内容区 32px；
+			   必须用 border-box 让 padding 算进 360 内 */
+			box-sizing: border-box;
+		}
 	}
 	/* #endif */
 </style>
