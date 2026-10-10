@@ -294,9 +294,14 @@
 	}
 
 	const goBack = () => {
-		// #ifdef MP-WEIXIN
-		uni.navigateBack()
-		// #endif
+		// 修复：原实现只有小程序分支，H5 下点返回完全没反应。
+		// 两端统一，并在页面栈为空时兜底跳首页。
+		const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+		if (pages && pages.length > 1) {
+			uni.navigateBack()
+		} else {
+			uni.reLaunch({ url: '/pages/homepage' })
+		}
 	}
 
 	const goToProductDetail = (id) => {
@@ -365,26 +370,6 @@
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		overflow-x: hidden;
 	}
-	/* #ifdef H5 */
-	/* ========== H5 弹性布局适配（仅网页端，小程序不受影响） ==========
-	   页面原本写死 max-width:375~400px，电脑上只有窄窄一条、两侧大片空白。
-	   策略：手机端（<=768px）完全沿用原设计；>=769px 放宽内容区并居中留白。
-	   用「居中限宽」而非拉伸——拉伸会把卡片和文字拉得过宽，反而难读。
-	*/
-	@media screen and (min-width: 769px) {
-		.tea-app {
-			max-width: 720px;
-			box-shadow: 0 0 40px rgba(44, 94, 48, 0.06);
-		}
-	}
-	@media screen and (min-width: 1200px) {
-		body, page { background: #EDE7DB; }
-		.tea-app {
-			max-width: 900px;
-			box-shadow: 0 0 60px rgba(44, 94, 48, 0.08);
-		}
-	}
-	/* #endif */
 
 	.paper-texture {
 		position: fixed;
@@ -402,16 +387,6 @@
 		pointer-events: none;
 		z-index: 0;
 	}
-	/* #ifdef H5 */
-	/* 底纹宽度需跟随 .tea-app 一起放宽，否则大屏上底纹只铺中间一段、
-	   内容区却更宽，会出现「中间有纹理、两边没有」的割裂感。 */
-	@media screen and (min-width: 769px) {
-		.paper-texture { width: 720px; }
-	}
-	@media screen and (min-width: 1200px) {
-		.paper-texture { width: 900px; }
-	}
-	/* #endif */
 
 	/* ========== 顶部导航 ========== */
 	.tea-header {
@@ -869,4 +844,22 @@
 	::-webkit-scrollbar {
 		display: none;
 	}
+
+
+	/* #ifdef H5 */
+	/* ========== H5 适配：PC 端统一 360px 居中（仅网页端，小程序零影响） ==========
+	   为什么是 360px：与登录页 .phone-frame 的 min(360px, 92vw) 保持一致，
+	   整个站点在电脑上呈现为「一部手机居中」的形态，而不是铺满宽屏。
+	   手机端（<=768px）不加任何覆盖，完全沿用原设计。
+	*/
+	@media screen and (min-width: 769px) {
+		.tea-app { max-width: 360px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
+		.paper-texture { width: 360px; }
+	}
+	/* 固定定位元素（底部导航/输入栏/浮动按钮等）原本贴视口边缘，
+	   宽屏下会跑到内容区外（实测 1920px 时「问茶」按钮贴到屏幕最右侧）。
+	   用 right 定位的元素不能用 margin:auto（fixed 下 right 优先），
+	   必须改成「视口宽 - 内容区宽)/2 + 原偏移」。 */
+	@media screen and (min-width: 769px) {	}
+	/* #endif */
 </style>

@@ -427,14 +427,21 @@ const showToast = (msg, duration = 2000) => {
   }, duration)
 }
 
+/**
+ * 返回上一页。
+ *
+ * 修复：原来 H5 分支里的 router.back() 是**注释掉的**，导致网页端点返回完全没反应
+ * （只有小程序走 uni.navigateBack()）。现在两端统一用 uni.navigateBack()，
+ * 并在页面栈为空时（例如直接以 URL 打开本页）兜底跳回首页，避免点了没反应。
+ */
 const goBack = () => {
-  console.log('返回上一页')
-  // #ifdef H5
-  // router.back()
-  // #endif
-  // #ifdef MP-WEIXIN
-  uni.navigateBack()
-  // #endif
+  const pages = getCurrentPages ? getCurrentPages() : []
+  if (pages && pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    // 页面栈只有本页：没有"上一页"可回，退回首页
+    uni.reLaunch({ url: '/pages/homepage' })
+  }
 }
 
 const goToHome = () => {
@@ -625,26 +632,6 @@ const loadMore = () => {
   font-family: '思源宋体', 'Songti SC', 'Times New Roman', serif;
   overflow-x: hidden;
 }
-	/* #ifdef H5 */
-	/* ========== H5 弹性布局适配（仅网页端，小程序不受影响） ==========
-	   页面原本写死 max-width:375~400px，电脑上只有窄窄一条、两侧大片空白。
-	   策略：手机端（<=768px）完全沿用原设计；>=769px 放宽内容区并居中留白。
-	   用「居中限宽」而非拉伸——拉伸会把卡片和文字拉得过宽，反而难读。
-	*/
-	@media screen and (min-width: 769px) {
-		.tea-app {
-			max-width: 720px;
-			box-shadow: 0 0 40px rgba(44, 94, 48, 0.06);
-		}
-	}
-	@media screen and (min-width: 1200px) {
-		body, page { background: #EDE7DB; }
-		.tea-app {
-			max-width: 900px;
-			box-shadow: 0 0 60px rgba(44, 94, 48, 0.08);
-		}
-	}
-	/* #endif */
 
 .paper-texture {
   position: fixed;
@@ -662,16 +649,6 @@ const loadMore = () => {
   pointer-events: none;
   z-index: 0;
 }
-	/* #ifdef H5 */
-	/* 底纹宽度需跟随 .tea-app 一起放宽，否则大屏上底纹只铺中间一段、
-	   内容区却更宽，会出现「中间有纹理、两边没有」的割裂感。 */
-	@media screen and (min-width: 769px) {
-		.paper-texture { width: 720px; }
-	}
-	@media screen and (min-width: 1200px) {
-		.paper-texture { width: 900px; }
-	}
-	/* #endif */
 
 /* ========== 顶部导航 ========== */
 .tea-header {
@@ -1364,20 +1341,26 @@ const loadMore = () => {
   display: none;
 }
 
+
+
 	/* #ifdef H5 */
-	/* ========== fixed 元素跟随内容区（仅网页端） ==========
-	   底部导航、输入栏、浮动按钮等原本是 position:fixed 贴视口边缘的，
-	   在宽屏下会跑到内容区外面（如 1920px 时「问茶」按钮贴到屏幕最右侧）。
-	   这里给它们加上与 .tea-app 一致的 max-width + margin:auto，
-	   让固定定位元素也收敛到内容区。手机端（<=768px）不加覆盖，保持原样。
+	/* ========== H5 适配：PC 端统一 360px 居中（仅网页端，小程序零影响） ==========
+	   为什么是 360px：与登录页 .phone-frame 的 min(360px, 92vw) 保持一致，
+	   整个站点在电脑上呈现为「一部手机居中」的形态，而不是铺满宽屏。
+	   手机端（<=768px）不加任何覆盖，完全沿用原设计。
 	*/
 	@media screen and (min-width: 769px) {
-		.tea-tabbar { max-width: 720px; margin: 0 auto; }
-		.toast { max-width: 720px; margin: 0 auto; }
+		.tea-app { max-width: 360px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
+		.paper-texture { width: 360px; }
 	}
-	@media screen and (min-width: 1200px) {
-		.tea-tabbar { max-width: 900px; }
-		.toast { max-width: 900px; }
+	/* 固定定位元素（底部导航/输入栏/浮动按钮等）原本贴视口边缘，
+	   宽屏下会跑到内容区外（实测 1920px 时「问茶」按钮贴到屏幕最右侧）。
+	   用 right 定位的元素不能用 margin:auto（fixed 下 right 优先），
+	   必须改成「视口宽 - 内容区宽)/2 + 原偏移」。 */
+	@media screen and (min-width: 769px) {
+	@media screen and (min-width: 769px) {
+		.toast { max-width: 360px; margin: 0 auto; }
+	}
 	}
 	/* #endif */
 </style>
