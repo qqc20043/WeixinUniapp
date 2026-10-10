@@ -697,6 +697,33 @@
 		overflow-x: hidden;
 	}
 
+	/* #ifdef H5 */
+	/* ========== H5 弹性布局适配（仅网页端，不影响小程序） ==========
+	   背景：页面原本写死 max-width:400px，在电脑上只有窄窄一条、两侧大片空白。
+	   策略：手机上保持原样（<=768px 不加任何覆盖）；>=769px 放宽内容区并留白，
+	   用「居中限宽」而不是拉伸——拉伸会让卡片和文字在大屏上被拉得很宽，反而难读。
+	   断点说明：
+	     <=768px   手机，沿用原设计（400px 居中，基本等于满屏）
+	     769-1199  平板 / 小窗口，放宽到 720px
+	     >=1200px  桌面，放宽到 900px 并给出柔和的外侧背景，让页面看起来是"一张纸"
+	*/
+	@media screen and (min-width: 769px) {
+		.tea-app {
+			max-width: 720px;
+			box-shadow: 0 0 40px rgba(44, 94, 48, 0.06);
+		}
+	}
+	@media screen and (min-width: 1200px) {
+		body, page {
+			background: #EDE7DB;
+		}
+		.tea-app {
+			max-width: 900px;
+			box-shadow: 0 0 60px rgba(44, 94, 48, 0.08);
+		}
+	}
+	/* #endif */
+
 	.paper-texture {
 		position: fixed;
 		top: 0;
@@ -708,6 +735,17 @@
 		pointer-events: none;
 		z-index: 0;
 	}
+
+	/* #ifdef H5 */
+	/* 底纹宽度必须跟着 .tea-app 一起放宽，否则大屏上底纹只铺中间 400px、
+	   内容区却更宽，会出现「中间有纹理、两边没有」的割裂感。 */
+	@media screen and (min-width: 769px) {
+		.paper-texture { width: 720px; }
+	}
+	@media screen and (min-width: 1200px) {
+		.paper-texture { width: 900px; }
+	}
+	/* #endif */
 
 	/* ========== 顶部导航 ========== */
 
@@ -1330,4 +1368,25 @@
 		bottom: 0;
 		z-index: 20;
 	}
+
+	/* #ifdef H5 */
+	/* ========== fixed 元素跟随内容区（仅网页端） ==========
+	   底部导航、输入栏、浮动按钮等原本是 position:fixed 贴视口边缘的，
+	   在宽屏下会跑到内容区外面（如 1920px 时「问茶」按钮贴到屏幕最右侧）。
+	   这里给它们加上与 .tea-app 一致的 max-width + margin:auto，
+	   让固定定位元素也收敛到内容区。手机端（<=768px）不加覆盖，保持原样。
+	*/
+	@media screen and (min-width: 769px) {
+		.tea-tabbar { max-width: 720px; margin: 0 auto; }
+		/* .ai-fab 用 right 定位，margin:auto 对它无效（fixed 下 right 优先），
+		   必须把 right 改成「视口右侧 + 内容区留白」的偏移量 */
+		.ai-fab { right: calc((100vw - 720px) / 2 + 16px); }
+		.toast { max-width: 720px; margin: 0 auto; }
+	}
+	@media screen and (min-width: 1200px) {
+		.tea-tabbar { max-width: 900px; }
+		.ai-fab { right: calc((100vw - 900px) / 2 + 16px); }
+		.toast { max-width: 900px; }
+	}
+	/* #endif */
 </style>

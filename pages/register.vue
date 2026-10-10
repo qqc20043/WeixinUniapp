@@ -275,7 +275,7 @@ const showToast = (msg, isError = false) => {
 
 /* 手机外框 */
 .mobile-frame {
-  width: 375px;
+  width: min(375px, 92vw);
   height: 667px;
   border: 12px solid #222;
   border-radius: 32px;
