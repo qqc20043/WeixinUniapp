@@ -2072,17 +2072,20 @@ const submitOrder = async() => {
 
 
 
+
+
 	/* #ifdef H5 */
-	/* ========== H5 适配：PC 端统一 360px 居中（仅网页端，小程序零影响） ==========
-	   为什么是 360px：与登录页 .phone-frame 的 min(360px, 92vw) 保持一致，
-	   整个站点在电脑上呈现为「一部手机居中」的形态。手机端（<=768px）不加覆盖。
+	/* ========== H5 适配：PC 端 640px 居中（仅网页端，小程序零影响） ==========
+	   手机端（<=768px）不加任何覆盖，完全沿用原设计（等于满屏）。
+	   平板/电脑（>=769px）用 640px 居中：比 360px 宽松、不至于两侧大片空白，
+	   同时仍保持「手机应用」的窄栏形态。
 	*/
 	@media screen and (min-width: 769px) {
-		.tea-app { max-width: 360px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
-		.paper-texture { width: 360px; }
-		.checkout-footer { max-width: 360px; margin: 0 auto; }
-		.toast { max-width: 360px; margin: 0 auto; }
-		.modal { max-width: 360px; margin: 0 auto; }
+		.tea-app { max-width: 640px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
+		.checkout-footer { left: 50%; margin-left: -320px; right: auto; width: 640px; box-sizing: border-box; }
+		.toast { max-width: 640px; margin: 0 auto; }
+		.modal { max-width: 640px; margin: 0 auto; }
+		.paper-texture { width: 640px; }
 	}
 	/* #endif */
 </style>
