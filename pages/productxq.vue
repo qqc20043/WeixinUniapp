@@ -17,10 +17,19 @@
        
 		<!-- 主内容区（可滚动） -->
 		<main class="detail-content">
-			<!-- 商品图片轮播（基于van-swipe-cell实现） -->
+			<!-- 商品图片轮播
+			     ⚠️ 这里必须做双端分流：
+			     H5 端 vant 4 有 Swipe/SwipeItem，由 main.js 的 app.use(Vant) 全局注册，
+			     模板直接写 <van-swipe> 在网页端是能解析的；
+			     但小程序端走的是 wxcomponents/vant-weapp，而本项目这一份 vant-weapp
+			     **并没有 swipe / swipe-item 组件目录**（只有 swipe-cell）——
+			     实测小程序构建产物 pages/productxq.wxml 里照样输出了 <van-swipe> 标签，
+			     而 productxq.json 的 usingComponents 是空的、app.json 里也没有这两个，
+			     即小程序端这两个标签是「未注册组件」，真机上不会渲染出任何东西。
+			     因此小程序端改用原生 swiper（等价能力，且零依赖）。 -->
 			<div class="product-swipe">
-				<!-- van-swipe-cell 侧滑单元格：左右可滑动显示操作按钮 -->
-				<van-swipe-cell :right-width="80" 
+				<!-- #ifdef H5 -->
+				<van-swipe-cell :right-width="80"
 					:left-width="80"
 					>
 					<div class="swipe-cell-content">
@@ -50,6 +59,28 @@
 						</div>
 					</template>
 				</van-swipe-cell>
+				<!-- #endif -->
+
+				<!-- #ifndef H5 -->
+				<!-- 小程序端：原生 swiper 轮播 + 普通收藏/分享按钮（vant-weapp 无 swipe 组件） -->
+				<div class="swipe-cell-content">
+					<swiper class="native-swiper" :autoplay="true" :interval="3000" :circular="true"
+						indicator-color="#2C5E30" indicator-active-color="#2C5E30">
+						<swiper-item>
+							<div class="swipe-item">
+								<span class="image-emoji">{{ product.emoji }}</span>
+							</div>
+						</swiper-item>
+					</swiper>
+					<div class="product-tag" :class="product.isNew ? 'new' : 'hot'">
+						{{ product.isNew ? '新品' : '热卖' }}
+					</div>
+				</div>
+				<div class="native-actions">
+					<div class="swipe-cell-btn left-btn" @click="goBack">分享</div>
+					<div class="swipe-cell-btn right-btn" @click="goBack">收藏</div>
+				</div>
+				<!-- #endif -->
 			</div>
 			<!-- 商品基本信息 -->
 			<div class="product-info-card">
@@ -423,7 +454,7 @@
 		position: relative;
 		width: 100%;
 		min-height: 100vh;
-		max-width: 375px;
+		max-width: 400px;
 		margin: 0 auto;
 		background: linear-gradient(145deg, #F5F0E8 0%, #F0E9E0 100%);
 		font-family: '思源宋体', 'Songti SC', 'Times New Roman', serif;
@@ -555,6 +586,30 @@
 	/* 左侧按钮（分享） */
 	.left-btn {
 	  background-color: #4cd964;
+	}
+
+	/* ---------- 小程序端专用：原生 swiper 轮播 ----------
+	   小程序走原生 swiper 替代 van-swipe（本项目的 vant-weapp 没有该组件）。
+	   swiper 必须给定高度，否则默认高度为 0，轮播不可见。 */
+	.native-swiper {
+	  width: 100%;
+	  height: 360px;
+	}
+	.native-swiper .swipe-item {
+	  height: 360px;
+	}
+	/* 小程序端专用：收藏/分享按钮从「侧滑」改为常驻一行
+	   （原生 swiper 没有 swipe-cell 的手势容器，常驻更直观且不会误触） */
+	.native-actions {
+	  display: flex;
+	  gap: 12px;
+	  padding: 12px 16px 0;
+	}
+	.native-actions .swipe-cell-btn {
+	  flex: 1;
+	  height: 40px;
+	  border-radius: 8px;
+	  font-size: 14px;
 	}
 
 	/* ========== 商品信息卡片 ========== */
@@ -1169,18 +1224,36 @@
 
 
 
+
+
 	/* #ifdef H5 */
-	/* ========== H5 适配：PC 端 640px 居中（仅网页端，小程序零影响） ==========
-	   手机端（<=768px）不加任何覆盖，完全沿用原设计（等于满屏）。
-	   平板/电脑（>=769px）用 640px 居中：比 360px 宽松、不至于两侧大片空白，
-	   同时仍保持「手机应用」的窄栏形态。
+	/* ================= H5 适配（仅网页端，小程序零影响）=================
+	   基准宽度：手机/平板/窄窗口统一 400px 居中；>=769px 放宽到 640px。
+	   BASE_W 必须与「本页 .tea-app 的 max-width」一致（脚本 fixTeaAppBase 已统一为 400px），
+	   否则底栏会与内容区错位。
+
+	   ⚠️ 为什么底栏规则要放在「所有视口」而不是只放在 >=769px 里：
+	   各页 .tea-tabbar 基础 CSS 是 `position: fixed; bottom: 0; width: 100%`，
+	   没有 left → 浏览器用「静态位置」（＝ .tea-app 左边缘）当起点。
+	   视口 620px 时：left=110（400px 内容区居中的留白）+ width=620 = 右边缘 730，
+	   超出视口 110px，第 5 项「我的」被推出屏幕。
+	   401~768px 区间原先完全没有约束（640px 限宽只写在 >=769px 里），所以必然溢出。
+	   修法：底栏用 left:50% + translateX(-50%) 自居中（不再依赖静态位置），
+	        再用 max-width 跟随内容区宽度。
 	*/
+	@media screen and (min-width: 1px) {
+		/* 所有视口：与 .tea-app 的 400px 内容区对齐 */
+		.detail-footer { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 400px; box-sizing: border-box; }
+		.toast { max-width: 400px; margin-left: auto; margin-right: auto; }
+		.add-animation { max-width: 400px; margin-left: auto; margin-right: auto; }
+	}
+
 	@media screen and (min-width: 769px) {
 		.tea-app { max-width: 640px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
-		.detail-footer { left: 50%; margin-left: -320px; right: auto; width: 640px; box-sizing: border-box; }
-		.toast { max-width: 640px; margin: 0 auto; }
-		.add-animation { max-width: 640px; margin: 0 auto; }
 		.paper-texture { width: 640px; }
+		.detail-footer { max-width: 640px; }
+		.toast { max-width: 640px; }
+		.add-animation { max-width: 640px; }
 	}
 	/* #endif */
 </style>

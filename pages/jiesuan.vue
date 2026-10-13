@@ -961,7 +961,7 @@ const submitOrder = async() => {
   position: relative;
   width: 100%;
   min-height: 100vh;
-  max-width: 375px;
+  max-width: 400px;
   margin: 0 auto;
   background: linear-gradient(145deg, #F5F0E8 0%, #F0E9E0 100%);
   font-family: '思源宋体', 'Songti SC', 'Times New Roman', serif;
@@ -2074,18 +2074,36 @@ const submitOrder = async() => {
 
 
 
+
+
 	/* #ifdef H5 */
-	/* ========== H5 适配：PC 端 640px 居中（仅网页端，小程序零影响） ==========
-	   手机端（<=768px）不加任何覆盖，完全沿用原设计（等于满屏）。
-	   平板/电脑（>=769px）用 640px 居中：比 360px 宽松、不至于两侧大片空白，
-	   同时仍保持「手机应用」的窄栏形态。
+	/* ================= H5 适配（仅网页端，小程序零影响）=================
+	   基准宽度：手机/平板/窄窗口统一 400px 居中；>=769px 放宽到 640px。
+	   BASE_W 必须与「本页 .tea-app 的 max-width」一致（脚本 fixTeaAppBase 已统一为 400px），
+	   否则底栏会与内容区错位。
+
+	   ⚠️ 为什么底栏规则要放在「所有视口」而不是只放在 >=769px 里：
+	   各页 .tea-tabbar 基础 CSS 是 `position: fixed; bottom: 0; width: 100%`，
+	   没有 left → 浏览器用「静态位置」（＝ .tea-app 左边缘）当起点。
+	   视口 620px 时：left=110（400px 内容区居中的留白）+ width=620 = 右边缘 730，
+	   超出视口 110px，第 5 项「我的」被推出屏幕。
+	   401~768px 区间原先完全没有约束（640px 限宽只写在 >=769px 里），所以必然溢出。
+	   修法：底栏用 left:50% + translateX(-50%) 自居中（不再依赖静态位置），
+	        再用 max-width 跟随内容区宽度。
 	*/
+	@media screen and (min-width: 1px) {
+		/* 所有视口：与 .tea-app 的 400px 内容区对齐 */
+		.checkout-footer { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 400px; box-sizing: border-box; }
+		.toast { max-width: 400px; margin-left: auto; margin-right: auto; }
+		.modal { max-width: 400px; margin-left: auto; margin-right: auto; }
+	}
+
 	@media screen and (min-width: 769px) {
 		.tea-app { max-width: 640px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
-		.checkout-footer { left: 50%; margin-left: -320px; right: auto; width: 640px; box-sizing: border-box; }
-		.toast { max-width: 640px; margin: 0 auto; }
-		.modal { max-width: 640px; margin: 0 auto; }
 		.paper-texture { width: 640px; }
+		.checkout-footer { max-width: 640px; }
+		.toast { max-width: 640px; }
+		.modal { max-width: 640px; }
 	}
 	/* #endif */
 </style>

@@ -861,6 +861,13 @@
 		border-radius: 2px;
 	}
 
+	/* 三张推荐卡。原设计是横向滑动 banner：
+	   .promo-card { flex: 0 0 160px; padding: 16px } → 实际盒宽 192px，
+	   3×192 + 2×12 = 600px，而 400px 内容区只有 336px 可用 → 溢出 264px，
+	   靠 overflow-x:auto 横向滚动查看。
+	   手机端保持原样（可触摸横滑）；
+	   桌面端没有横向滚动条、鼠标也划不动 → 第 3 张卡永远不可达，
+	   因此 >=769px 改为等分三列换行，让三张卡都可见。 */
 	.promo-grid {
 		display: flex;
 		gap: 12px;
@@ -1339,17 +1346,39 @@
 
 
 
+
+
 	/* #ifdef H5 */
-	/* ========== H5 适配：PC 端 640px 居中（仅网页端，小程序零影响） ==========
-	   手机端（<=768px）不加任何覆盖，完全沿用原设计（等于满屏）。
-	   平板/电脑（>=769px）用 640px 居中：比 360px 宽松、不至于两侧大片空白，
-	   同时仍保持「手机应用」的窄栏形态。
+	/* ================= H5 适配（仅网页端，小程序零影响）=================
+	   基准宽度：手机/平板/窄窗口统一 400px 居中；>=769px 放宽到 640px。
+	   BASE_W 必须与「本页 .tea-app 的 max-width」一致（脚本 fixTeaAppBase 已统一为 400px），
+	   否则底栏会与内容区错位。
+
+	   ⚠️ 为什么底栏规则要放在「所有视口」而不是只放在 >=769px 里：
+	   各页 .tea-tabbar 基础 CSS 是 `position: fixed; bottom: 0; width: 100%`，
+	   没有 left → 浏览器用「静态位置」（＝ .tea-app 左边缘）当起点。
+	   视口 620px 时：left=110（400px 内容区居中的留白）+ width=620 = 右边缘 730，
+	   超出视口 110px，第 5 项「我的」被推出屏幕。
+	   401~768px 区间原先完全没有约束（640px 限宽只写在 >=769px 里），所以必然溢出。
+	   修法：底栏用 left:50% + translateX(-50%) 自居中（不再依赖静态位置），
+	        再用 max-width 跟随内容区宽度。
 	*/
+	@media screen and (min-width: 1px) {
+		/* 所有视口：与 .tea-app 的 400px 内容区对齐 */
+		.tea-tabbar { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 400px; box-sizing: border-box; }
+		.ai-fab { left: auto; right: calc((100% - 400px) / 2 + 16px); }
+	}
+
 	@media screen and (min-width: 769px) {
 		.tea-app { max-width: 640px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
-		.tea-tabbar { left: 50%; margin-left: -320px; right: auto; width: 640px; box-sizing: border-box; }
-		.ai-fab { left: auto; right: calc((100% - 640px) / 2 + 16px); }
 		.paper-texture { width: 640px; }
+		.tea-tabbar { max-width: 640px; }
+		.ai-fab { right: calc((100% - 640px) / 2 + 16px); }
+		/* 桌面端把横向滑动 banner 改成等分三列：
+		   原设计 .promo-grid 溢出 264px 靠横滑，但桌面没有触摸横滑也看不到滚动条，
+		   第 3 张卡不可达。改为换行等分后三张都可见。 */
+		.promo-grid { flex-wrap: wrap; overflow-x: visible; }
+		.promo-card { flex: 1 1 calc((100% - 24px) / 3); min-width: 0; }
 	}
 	/* #endif */
 </style>

@@ -615,6 +615,8 @@
 		display: flex;
 		flex-direction: column;
 		position: relative;
+		max-width: 400px;
+		margin: 0 auto;
 	}
 
 	.paper-texture {
@@ -651,6 +653,11 @@
 	.model-badge {
 		display: flex;
 		align-items: center;
+		/* ⚠️ 必须允许换行：徽章含 4 个子项（状态点 + 模型名 + 「真实模型」+「· 流式」），
+		   真机上总宽约 350px，窄屏内容区只有 320px。
+		   flex 默认 nowrap 且子项可收缩 → 模型名首尾被裁成「deepseek」中段消失。
+		   实测：375px 视口下 .model-name 被压到 62px（正常需 ~140px）。 */
+		flex-wrap: wrap;
 		gap: 6px;
 		padding: 6px 16px;
 		font-size: 11px;
@@ -660,9 +667,13 @@
 	.model-badge .dot {
 		width: 6px; height: 6px; border-radius: 50%;
 		background: #4CAF50;
+		/* 状态点不能被压扁 */
+		flex-shrink: 0;
 	}
 	.model-badge .dot.mock { background: #E8B84B; }
-	.model-name { color: #2C5E30; font-weight: 600; }
+	/* 模型名与两个模式标签都是原子信息，禁止收缩（否则文字被裁到只剩中间一段） */
+	.model-name { color: #2C5E30; font-weight: 600; flex-shrink: 0; }
+	.model-mode { flex-shrink: 0; white-space: nowrap; }
 
 	.tea-content {
 		flex: 1;
@@ -1083,24 +1094,32 @@
 
 
 
+
+
 	/* #ifdef H5 */
-	/* ========== H5 适配：PC 端 640px 居中（仅网页端，小程序零影响） ==========
-	   手机端（<=768px）不加任何覆盖，完全沿用原设计（等于满屏）。
-	   平板/电脑（>=769px）用 640px 居中：比 360px 宽松、不至于两侧大片空白，
-	   同时仍保持「手机应用」的窄栏形态。
+	/* ================= H5 适配（仅网页端，小程序零影响）=================
+	   基准宽度：手机/平板/窄窗口统一 400px 居中；>=769px 放宽到 640px。
+	   BASE_W 必须与「本页 .tea-app 的 max-width」一致（脚本 fixTeaAppBase 已统一为 400px），
+	   否则底栏会与内容区错位。
+
+	   ⚠️ 为什么底栏规则要放在「所有视口」而不是只放在 >=769px 里：
+	   各页 .tea-tabbar 基础 CSS 是 `position: fixed; bottom: 0; width: 100%`，
+	   没有 left → 浏览器用「静态位置」（＝ .tea-app 左边缘）当起点。
+	   视口 620px 时：left=110（400px 内容区居中的留白）+ width=620 = 右边缘 730，
+	   超出视口 110px，第 5 项「我的」被推出屏幕。
+	   401~768px 区间原先完全没有约束（640px 限宽只写在 >=769px 里），所以必然溢出。
+	   修法：底栏用 left:50% + translateX(-50%) 自居中（不再依赖静态位置），
+	        再用 max-width 跟随内容区宽度。
 	*/
+	@media screen and (min-width: 1px) {
+		/* 所有视口：与 .tea-app 的 400px 内容区对齐 */
+		.input-bar { left: 50%; right: auto; transform: translateX(-50%); width: 100%; max-width: 400px; box-sizing: border-box; }
+	}
+
 	@media screen and (min-width: 769px) {
-		/* ⚠️ agent.vue 的 .tea-app 原本没有 margin:0 auto（其它页面都有），
-		   只加 max-width 会靠左而不是居中，必须补上。 */
-		.tea-app { max-width: 640px; margin: 0 auto; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
-		/* .input-bar 用 left:0;right:0 撑满视口，margin:auto 对它无效（fixed 下 left/right 优先）。
-		   用 left:50% + margin-left:-320px（半宽）居中，比 calc(100vw-...) 更准
-		   （100vw 含滚动条宽度而 clientWidth 不含）。 */
-		.input-bar { left: 50%; margin-left: -320px; right: auto; width: 640px; box-sizing: border-box; }
-		/* .chips 有 padding，需 border-box 否则宽度会超出内容区 */
-		.chips { max-width: 640px; margin: 0 auto; box-sizing: border-box; }
-		/* 注意：agent 的 .paper-texture 是 inset:0 铺满式点状纹理（原设计即如此），
-		   不加宽度限制，保持铺满。 */
+		.tea-app { max-width: 640px; box-shadow: 0 0 40px rgba(44, 94, 48, 0.06); }
+		.paper-texture { width: 640px; }
+		.input-bar { max-width: 640px; }
 	}
 	/* #endif */
 </style>

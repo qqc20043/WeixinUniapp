@@ -12,6 +12,20 @@
  */
 import { computed } from 'vue'
 
+/**
+ * van-popup 的 H5 替身（轻量自绘版）的**运行时兼容补丁**不在本文件里。
+ *
+ * 原因（实测结论，别把补丁搬回来）：
+ *   Vue 3 运行时在模块初始化时就做了 `c = Object.assign` 的**局部别名**，
+ *   之后 slots 更新闭包用的是 `c(...)` 而不是全局 `Object.assign`。
+ *   如果在本组件（或任何页面组件）里包装全局 `Object.assign`，
+ *   那时运行时早已完成别名捕获 → 包装对已捕获的 `c` 完全无效。
+ *   实测：把补丁写在 setup() 里，订单页 TypeError 依旧存在。
+ *
+ *   ⇒ 补丁必须放在 **main.js 的模块顶层、`import` 顺序最前**
+ *     （早于任何 @dcloudio / vue 运行时模块求值），见 main.js 的注释。
+ */
+
 const props = defineProps({
   show: { type: Boolean, default: false },
   position: { type: String, default: 'center' },
